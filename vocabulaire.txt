@@ -80,6 +80,7 @@ JavaScript
 TypeScript
 Docker
 Kubernetes
+Git
 GitHub
 GitLab
 CI/CD

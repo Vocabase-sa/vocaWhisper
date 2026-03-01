@@ -619,25 +619,30 @@ def on_tray_settings(icon, item):
 
 
 def _open_settings():
-    from config_ui import open_config_window
-    log("Ouverture des paramètres...")
-    open_config_window(on_close_callback=_on_settings_closed)
+    log("Ouverture des paramètres (sous-processus)...")
+    try:
+        python = sys.executable
+        script = os.path.join(BASE_DIR, "config_ui.py")
+        result = subprocess.run([python, script], cwd=BASE_DIR)
+        exit_code = result.returncode
+        log(f"Paramètres fermés (code retour : {exit_code})")
+        # Recharger la config dans tous les cas
+        config.update(load_config())
+        log("Paramètres rechargés.")
+        # Vérifier si un redémarrage est nécessaire (exit code 1)
+        if exit_code == 1:
+            log("Redémarrage demandé suite au changement de paramètres...")
+            state.restart_requested = True
+            state.running = False
+            if state.tray_icon:
+                try:
+                    state.tray_icon.stop()
+                except Exception:
+                    pass
+    except Exception as e:
+        log(f"ERREUR ouverture paramètres : {e}")
+        logging.exception("_open_settings crash")
 
-
-def _on_settings_closed(needs_restart=False):
-    """Callback après fermeture des paramètres. Relance l'app si nécessaire."""
-    config.update(load_config())
-    log("Paramètres rechargés.")
-    if needs_restart:
-        log("Redémarrage demandé suite au changement de paramètres...")
-        state.restart_requested = True
-        state.running = False
-        # Arrêter le tray icon pour débloquer la boucle principale
-        if state.tray_icon:
-            try:
-                state.tray_icon.stop()
-            except Exception:
-                pass
 
 
 def on_tray_quit(icon, item):

@@ -7,6 +7,7 @@ import json
 import os
 import platform
 import subprocess
+import sys
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -515,4 +516,12 @@ def open_config_window(on_close_callback=None):
 
 
 if __name__ == "__main__":
-    open_config_window()
+    # Quand lancé en sous-processus, le code retour indique si un redémarrage est nécessaire
+    _exit_code = 0
+
+    def _standalone_callback(needs_restart=False):
+        global _exit_code
+        _exit_code = 1 if needs_restart else 0
+
+    open_config_window(on_close_callback=_standalone_callback)
+    sys.exit(_exit_code)
