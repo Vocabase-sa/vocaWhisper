@@ -586,8 +586,40 @@ def setup_hotkey_keyboard():
 # =============================================================================
 # Icône System Tray
 # =============================================================================
+def _load_custom_icon(color="green"):
+    """Charge une icône personnalisée depuis le dossier icons/."""
+    icon_dir = os.path.join(BASE_DIR, "icons")
+    # Chercher icon_green.png, icon_red.png, icon_green.ico, icon_red.ico
+    for ext in ("png", "ico"):
+        path = os.path.join(icon_dir, f"icon_{color}.{ext}")
+        if os.path.isfile(path):
+            try:
+                img = Image.open(path)
+                img = img.resize((64, 64), Image.LANCZOS)
+                return img
+            except Exception:
+                pass
+    # Fallback : icône unique (icon.png ou icon.ico)
+    for ext in ("png", "ico"):
+        path = os.path.join(icon_dir, f"icon.{ext}")
+        if os.path.isfile(path):
+            try:
+                img = Image.open(path)
+                img = img.resize((64, 64), Image.LANCZOS)
+                return img
+            except Exception:
+                pass
+    return None
+
+
 def create_tray_icon(color="gray"):
-    """Crée une image pour l'icône du tray."""
+    """Crée une image pour l'icône du tray (custom ou générée)."""
+    # Essayer de charger une icône personnalisée
+    custom = _load_custom_icon(color)
+    if custom is not None:
+        return custom
+
+    # Fallback : icône générée (cercle coloré avec micro)
     size = 64
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)

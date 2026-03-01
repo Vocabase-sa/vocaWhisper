@@ -221,6 +221,18 @@ Un clic droit sur l'icone dans la barre des taches donne acces a :
 
 L'icone change de couleur : **verte** = pret, **rouge** = enregistrement en cours.
 
+#### Icone personnalisee
+
+Vous pouvez remplacer l'icone par defaut en placant vos images dans le dossier `icons/` :
+
+| Fichier | Usage |
+|---------|-------|
+| `icons/icon_green.png` | Icone quand l'app est prete |
+| `icons/icon_red.png` | Icone pendant l'enregistrement |
+| `icons/icon.png` | Icone unique (utilisee pour les deux etats) |
+
+Les formats `.png` et `.ico` sont supportes. Taille recommandee : 64x64 pixels. Si aucune icone n'est trouvee, l'icone par defaut (cercle colore avec micro) est utilisee.
+
 ### Overlay d'enregistrement
 
 Pendant l'enregistrement, une pilule futuriste flottante s'affiche en bas de l'ecran :
@@ -309,6 +321,7 @@ vocaWhisper/
 ├── vocabulaire.txt        # Mots personnalises pour Whisper
 ├── corrections.txt        # Regles de correction post-transcription
 ├── requirements.txt       # Dependances Python
+├── icons/                 # Icones personnalisees (icon_green.png, icon_red.png)
 ├── install_windows.bat    # Script d'installation Windows
 ├── install_mac.sh         # Script d'installation macOS
 ├── run.bat                # Lanceur Windows (avec console)
