@@ -444,7 +444,12 @@ class ConfigWindow:
 
         # Auto-start with system
         self.autostart_var = tk.BooleanVar(value=_startup_shortcut_exists())
-        autostart_text = "Démarrer automatiquement avec Windows (sans fenêtre CMD)" if IS_WINDOWS else "Démarrer automatiquement au login"
+        if IS_WINDOWS:
+            autostart_text = "Démarrer automatiquement avec Windows"
+        elif IS_MAC:
+            autostart_text = "Démarrer automatiquement avec macOS"
+        else:
+            autostart_text = "Démarrer automatiquement avec Linux"
         ttk.Checkbutton(tab_general, text=autostart_text,
                         variable=self.autostart_var).grid(row=row, column=0, columnspan=3, sticky="w", pady=6)
         row += 1
