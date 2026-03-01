@@ -16,11 +16,12 @@ Utilise [faster-whisper](https://github.com/SYSTRAN/faster-whisper) avec acceler
 - **Vocabulaire personnalise** : ajoutez des mots techniques pour ameliorer la reconnaissance
 - **Corrections automatiques** : regles de post-traitement pour corriger les erreurs recurrentes
 - **Icone system tray** : acces rapide aux parametres et controle de l'application
-- **Overlay visuel** : pastille rouge clignotante pendant l'enregistrement
+- **Overlay futuriste** : pilule flottante avec indicateur REC, timer et barres audio animees en temps reel
 - **Choix du microphone** : selection du peripherique audio dans les parametres
 - **Demarrage automatique** : option pour lancer l'application au demarrage du systeme
 - **Multi-modeles** : tiny, base, small, medium, large-v2, large-v3, large-v3-turbo, distil-large-v3
 - **Fenetre de telechargement** : progression visuelle lors du telechargement initial du modele
+- **Detection du cache** : affiche si chaque modele est deja telecharge ou a telecharger, avec sa taille
 
 ---
 
@@ -179,13 +180,16 @@ Ou utilisez les parametres via l'icone system tray (clic droit > Parametres).
 
 ### Modeles recommandes
 
-| Configuration | Modele | Precision | RAM GPU |
-|---------------|--------|-----------|---------|
-| NVIDIA RTX | `large-v3` | `float16` | ~3 Go |
-| NVIDIA RTX (rapide) | `large-v3-turbo` | `float16` | ~1.6 Go |
-| Apple Silicon | `large-v3-turbo` | `float16` | ~1.6 Go |
-| CPU performant | `medium` | `int8` | - |
-| CPU modeste | `small` | `int8` | - |
+| Configuration | Modele | Precision | RAM GPU | Langues |
+|---------------|--------|-----------|---------|---------|
+| NVIDIA RTX | `large-v3` | `float16` | ~3 Go | Multilingue |
+| NVIDIA RTX (rapide) | `large-v3-turbo` | `float16` | ~1.6 Go | Multilingue |
+| Apple Silicon | `large-v3-turbo` | `float16` | ~1.6 Go | Multilingue |
+| CPU performant | `medium` | `int8` | - | Multilingue |
+| CPU modeste | `small` | `int8` | - | Multilingue |
+| Anglais uniquement | `distil-large-v3` | `float16` | ~1.5 Go | Anglais uniquement |
+
+> **Attention** : Les modeles `distil-large-v2` et `distil-large-v3` ne supportent que **l'anglais**. Pour le francais ou toute autre langue, utilisez `large-v3` ou `large-v3-turbo`. L'application affiche un avertissement si un modele distil est selectionne avec une langue non anglaise.
 
 ---
 
@@ -205,7 +209,8 @@ Ou utilisez les parametres via l'icone system tray (clic droit > Parametres).
 | Raccourci | Action |
 |-----------|--------|
 | `Ctrl+Space` | Demarrer/arreter l'enregistrement |
-| `Echap` | Quitter l'application |
+
+> Pour quitter l'application, utilisez le clic droit sur l'icone system tray > **Quitter**.
 
 ### Icone system tray
 
@@ -215,6 +220,16 @@ Un clic droit sur l'icone dans la barre des taches donne acces a :
 - **Quitter** : ferme l'application
 
 L'icone change de couleur : **verte** = pret, **rouge** = enregistrement en cours.
+
+### Overlay d'enregistrement
+
+Pendant l'enregistrement, une pilule futuriste flottante s'affiche en bas de l'ecran :
+
+- **Point REC** clignotant avec halo neon
+- **Timer** en temps reel (minutes:secondes)
+- **Barres audio** animees qui reagissent au niveau du microphone
+- **Bordure neon** pulsante (rouge sombre a rouge vif)
+- L'overlay est click-through (les clics passent a travers)
 
 ---
 
@@ -235,7 +250,9 @@ Accessible via clic droit sur l'icone tray > **Parametres**. La fenetre comporte
 | **Coller automatiquement** | Coller le texte apres transcription | Si active, simule Ctrl+V apres la copie dans le presse-papier |
 | **Demarrage automatique** | Lancer avec le systeme | Windows : cree un raccourci dans le dossier Startup. macOS : cree un LaunchAgent. |
 
-L'onglet General affiche aussi un indicateur en temps reel pour chaque modele : **en local** (avec la taille) ou **a telecharger** (avec la taille estimee).
+L'onglet General affiche aussi :
+- Un indicateur en temps reel pour chaque modele : **en local** (avec la taille) ou **a telecharger** (avec la taille estimee)
+- Un **avertissement** si un modele anglais uniquement est selectionne avec une autre langue
 
 ### Onglet Vocabulaire
 
@@ -269,11 +286,11 @@ au cercle -> OCM
 
 # Corrections VoIP
 open cypes -> OpenSIPs
-camaïeu -> Kamailio
+camaieu -> Kamailio
 
 # Corrections infra
 cubernétise -> Kubernetes
-gîte -> Git
+gite -> Git
 ```
 
 > **Astuce** : dictez vos termes techniques plusieurs fois, notez les erreurs recurrentes de Whisper, puis ajoutez les corrections correspondantes. Combinez avec le vocabulaire pour un maximum de precision.
@@ -286,7 +303,7 @@ gîte -> Git
 vocaWhisper/
 ├── whisper_dictation.py   # Application principale
 ├── config_ui.py           # Interface de parametres (tkinter)
-├── overlay_ui.py          # Overlay visuel d'enregistrement
+├── overlay_ui.py          # Overlay futuriste d'enregistrement
 ├── download_ui.py         # Fenetre de progression du telechargement
 ├── config.json.example    # Exemple de configuration
 ├── vocabulaire.txt        # Mots personnalises pour Whisper
@@ -316,7 +333,9 @@ Les logs sont ecrits dans `whisper_dictation.log` a la racine du projet. Ce fich
 | Transcription lente | Passez a un modele plus petit (`small`, `medium`) ou verifiez que le GPU est actif |
 | Texte non colle | Verifiez que `auto_paste` est active et que l'application cible accepte Ctrl+V |
 | Parametres ne s'ouvrent pas | Verifiez les logs ; l'interface se lance dans un processus separe |
-| `RuntimeError: main thread` | Mettez a jour vers la derniere version (fix inclus) |
+| Modele distil ne transcrit pas le francais | Les modeles `distil` ne supportent que l'anglais. Utilisez `large-v3` ou `large-v3-turbo` |
+| Modele affiche "a telecharger" alors qu'il est present | Le nom du cache peut varier selon l'org. Mettez a jour vers la derniere version |
+| L'app se ferme toute seule | Verifiez les logs (`whisper_dictation.log`) pour identifier la cause |
 
 ---
 
