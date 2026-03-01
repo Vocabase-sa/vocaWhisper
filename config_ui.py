@@ -326,6 +326,21 @@ class ConfigWindow:
             cursor="hand2",
         )
         save_btn.pack(side="right", padx=(5, 0))
+
+        restart_btn = tk.Button(
+            btn_frame,
+            text="  REDEMARRER  ",
+            command=self._save_and_restart,
+            bg="#dc3545",
+            fg="white",
+            font=("Segoe UI", 11, "bold"),
+            relief="flat",
+            padx=20,
+            pady=6,
+            cursor="hand2",
+        )
+        restart_btn.pack(side="right", padx=(5, 0))
+
         ttk.Button(btn_frame, text="Annuler", command=self._cancel).pack(side="right")
 
         # Onglets
@@ -617,6 +632,46 @@ class ConfigWindow:
         self.root.destroy()
         if self.on_close_callback:
             self.on_close_callback(needs_restart=do_restart)
+
+    def _save_and_restart(self):
+        """Sauvegarde et force le redémarrage de l'application."""
+        try:
+            lang = self.lang_var.get()
+            auto_start = self.autostart_var.get()
+            mic_selection = self.mic_var.get()
+            mic_value = "" if mic_selection == "(défaut système)" else mic_selection
+
+            new_cfg = {
+                "model_size": self.model_var.get(),
+                "device": self.device_var.get(),
+                "compute_type": self.compute_var.get(),
+                "language": lang if lang != "auto" else None,
+                "audio_gain": round(self.gain_var.get(), 1),
+                "auto_paste": self.paste_var.get(),
+                "auto_start": auto_start,
+                "microphone": mic_value,
+            }
+            save_config(new_cfg)
+
+            if auto_start and not _startup_shortcut_exists():
+                _create_startup_shortcut()
+            elif not auto_start and _startup_shortcut_exists():
+                _remove_startup_shortcut()
+
+            vocab_content = self.vocab_text.get("1.0", "end-1c")
+            save_vocab(vocab_content)
+
+            corr_content = self.corrections_text.get("1.0", "end-1c")
+            save_corrections(corr_content)
+
+        except Exception as e:
+            print(f"[config_ui] ERREUR sauvegarde : {e}", flush=True)
+            messagebox.showerror("Erreur", f"Erreur lors de la sauvegarde :\n{e}")
+            return
+
+        self.root.destroy()
+        if self.on_close_callback:
+            self.on_close_callback(needs_restart=True)
 
     def _cancel(self):
         self.root.destroy()
