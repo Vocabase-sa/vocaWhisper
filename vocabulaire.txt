@@ -1,0 +1,109 @@
+# =============================================
+# Vocabulaire technique pour Whisper
+# =============================================
+# Un mot ou expression par ligne.
+# Les lignes commençant par # sont ignorées.
+# Modifie ce fichier librement avec le Bloc-notes !
+
+# --- VoIP / Télécom ---
+SIP
+VoIP
+RTP
+SRTP
+ZRTP
+SDP
+OpenSIPs
+Odin Obelis
+OCM
+Open Cloud Manager
+Odin
+Obelis
+Obelisk
+Odin Obelis Telecom
+Asterisk
+FreeSWITCH
+Kamailio
+OpenSER
+PBX
+IPBX
+trunk SIP
+registrar
+proxy SIP
+B2BUA
+PJSIP
+chan_sip
+chan_pjsip
+dialplan
+IVR
+ACD
+SVI
+codec
+G.711
+G.729
+Opus
+DTMF
+RFC 2833
+NAT
+STUN
+TURN
+ICE
+WebRTC
+WebSocket
+WSS
+TLS
+QoS
+jitter
+latence
+MOS
+CDR
+call detail record
+DID
+DDI
+numéro SDA
+
+# --- IoT / Automation ---
+Node-RED
+NodeRED
+MQTT
+Mosquitto
+broker MQTT
+Home Assistant
+Zigbee
+Z-Wave
+
+# --- Infra / Dev ---
+API
+REST
+JSON
+Python
+JavaScript
+TypeScript
+Docker
+Kubernetes
+GitHub
+GitLab
+CI/CD
+Node.js
+React
+PostgreSQL
+MySQL
+Redis
+OVH
+AWS
+Let's Encrypt
+Nginx
+Apache
+
+# --- IA ---
+Claude
+Anthropic
+GPT
+LLM
+prompt
+NVIDIA 
+RTX4090
+model 
+large-v3
+CPU 
+GPU
+whisper

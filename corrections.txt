@@ -1,0 +1,37 @@
+# =============================================
+# Corrections post-transcription
+# =============================================
+# Format : erreur -> correction
+# Une correction par ligne.
+# Les lignes commençant par # sont ignorées.
+# La recherche est insensible à la casse.
+# Modifie ce fichier librement !
+
+# --- VoIP ---
+au cercle -> OCM
+open cypes -> OpenSIPs
+open SIPes -> OpenSIPs
+open SIPS -> OpenSIPs
+open sipes -> OpenSIPs
+OpenSig -> OpenSIPs
+au dîne -> Odin
+obelisse -> Obelis
+au bélisse -> Obelis
+astérisque -> Asterisk
+free switch -> FreeSWITCH
+camaïeu -> Kamailio
+camaillio -> Kamailio
+
+# --- IoT ---
+noeud red -> Node-RED
+node red -> Node-RED
+Nordrad -> Node-RED
+moustiqueau -> Mosquitto
+mosquito -> Mosquitto
+
+# --- Infra ---
+dockere -> Docker
+cubernétise -> Kubernetes
+Post-graisse QL -> PostgreSQL
+post-graisse -> PostgreSQL
+mon SQL -> MySQL
