@@ -167,6 +167,7 @@ class AppState:
         self.ctrl_pressed = False
         self.audio_levels: collections.deque = collections.deque(maxlen=50)
         self.overlay = None
+        self.settings_open = False
 
 state = AppState()
 
@@ -561,6 +562,8 @@ def setup_hotkey_pynput():
         elif key == pynput_keyboard.Key.space and state.ctrl_pressed:
             threading.Thread(target=toggle_recording, daemon=True).start()
         elif key == pynput_keyboard.Key.esc:
+            if state.settings_open:
+                return  # Ignorer Echap pendant que les paramètres sont ouverts
             log("Echap pressé, fermeture...")
             state.running = False
             return False  # Arrête le listener
@@ -626,6 +629,7 @@ def on_tray_settings(icon, item):
 
 def _open_settings():
     log("Ouverture des paramètres (sous-processus)...")
+    state.settings_open = True
     try:
         python = sys.executable
         script = os.path.join(BASE_DIR, "config_ui.py")
@@ -648,6 +652,8 @@ def _open_settings():
     except Exception as e:
         log(f"ERREUR ouverture paramètres : {e}")
         logging.exception("_open_settings crash")
+    finally:
+        state.settings_open = False
 
 
 
