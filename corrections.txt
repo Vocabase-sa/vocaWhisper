@@ -35,3 +35,5 @@ cubernétise -> Kubernetes
 Post-graisse QL -> PostgreSQL
 post-graisse -> PostgreSQL
 mon SQL -> MySQL
+gîte -> Git
+rythme -> readme

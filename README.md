@@ -189,45 +189,16 @@ Ou utilisez les parametres via l'icone system tray (clic droit > Parametres).
 
 ---
 
-## Vocabulaire personnalise
+## Fonctionnement
 
-Editez `vocabulaire.txt` pour ajouter des mots techniques (un par ligne) :
+### Cycle de dictee
 
-```
-# Termes metier
-OpenSIPs
-Kamailio
-FreeSWITCH
-Kubernetes
-Node-RED
-```
-
-Ces mots sont fournis comme prompt initial a Whisper pour ameliorer la reconnaissance des termes specifiques a votre domaine.
-
----
-
-## Corrections automatiques
-
-Editez `corrections.txt` pour definir des regles de remplacement :
-
-```
-# Format : erreur -> correction
-open cypes -> OpenSIPs
-cubernétise -> Kubernetes
-mosquito -> Mosquitto
-```
-
-Les corrections sont appliquees apres chaque transcription (insensible a la casse).
-
----
-
-## Utilisation
-
-1. Lancez l'application (icone verte dans le system tray)
-2. Appuyez sur **Ctrl+Space** pour commencer a dicter
-3. Une pastille rouge apparait a l'ecran
-4. Appuyez a nouveau sur **Ctrl+Space** pour arreter
-5. Le texte est automatiquement transcrit, copie et colle
+1. **Lancement** : l'application charge le modele Whisper en memoire (GPU ou CPU) et affiche une icone verte dans le system tray
+2. **Ctrl+Space (1er appui)** : l'enregistrement audio demarre, un overlay futuriste s'affiche (pilule avec indicateur REC, timer et barres audio en temps reel)
+3. **Ctrl+Space (2e appui)** : l'enregistrement s'arrete, l'audio est amplifie selon le gain configure
+4. **Transcription** : faster-whisper transcrit l'audio en texte, en utilisant le vocabulaire personnalise comme contexte
+5. **Corrections** : les regles de `corrections.txt` sont appliquees au texte transcrit
+6. **Resultat** : le texte final est copie dans le presse-papier et automatiquement colle (Ctrl+V) dans l'application active
 
 ### Raccourcis
 
@@ -235,6 +206,77 @@ Les corrections sont appliquees apres chaque transcription (insensible a la cass
 |-----------|--------|
 | `Ctrl+Space` | Demarrer/arreter l'enregistrement |
 | `Echap` | Quitter l'application |
+
+### Icone system tray
+
+Un clic droit sur l'icone dans la barre des taches donne acces a :
+
+- **Parametres** : ouvre la fenetre de configuration (onglets General, Vocabulaire, Corrections)
+- **Quitter** : ferme l'application
+
+L'icone change de couleur : **verte** = pret, **rouge** = enregistrement en cours.
+
+---
+
+## Parametres (interface graphique)
+
+Accessible via clic droit sur l'icone tray > **Parametres**. La fenetre comporte 3 onglets :
+
+### Onglet General
+
+| Parametre | Description | Detail |
+|-----------|-------------|--------|
+| **Modele Whisper** | Taille du modele de reconnaissance | `tiny` (rapide, peu precis) a `large-v3` (lent, tres precis). Un changement necessite un redemarrage. |
+| **Device** | Peripherique de calcul | `cuda` (GPU NVIDIA), `mps` (Apple Silicon) ou `cpu`. Un changement necessite un redemarrage. |
+| **Precision** | Type de calcul numerique | `float16` (GPU, rapide), `float32` (precis), `int8` (CPU, economique). Un changement necessite un redemarrage. |
+| **Langue** | Langue de transcription | `fr`, `en`, `de`, `es`, `nl`, `it`, `pt` ou `auto` (detection automatique) |
+| **Gain micro** | Amplification de l'audio | Curseur de x1.0 a x20.0. Augmentez si votre micro est trop faible. |
+| **Microphone** | Peripherique d'entree audio | Liste les micros detectes. "(defaut systeme)" utilise le micro par defaut de l'OS. |
+| **Coller automatiquement** | Coller le texte apres transcription | Si active, simule Ctrl+V apres la copie dans le presse-papier |
+| **Demarrage automatique** | Lancer avec le systeme | Windows : cree un raccourci dans le dossier Startup. macOS : cree un LaunchAgent. |
+
+L'onglet General affiche aussi un indicateur en temps reel pour chaque modele : **en local** (avec la taille) ou **a telecharger** (avec la taille estimee).
+
+### Onglet Vocabulaire
+
+Zone de texte libre pour ajouter des mots ou expressions que Whisper a du mal a reconnaitre. Un mot ou expression par ligne, les lignes commencant par `#` sont ignorees.
+
+**Comment ca marche** : les mots sont concatenes et envoyes comme `initial_prompt` a Whisper. Cela oriente le modele vers ces termes sans le forcer, ce qui ameliore la reconnaissance du jargon technique, des noms propres ou des acronymes.
+
+Exemple :
+```
+# VoIP
+OpenSIPs
+Kamailio
+FreeSWITCH
+
+# Infra
+Kubernetes
+Docker
+PostgreSQL
+```
+
+### Onglet Corrections
+
+Zone de texte libre pour definir des regles de remplacement appliquees **apres** chaque transcription. Format : `erreur -> correction` (une par ligne, `#` pour commenter).
+
+**Comment ca marche** : chaque regle est une recherche/remplacement insensible a la casse. Utile quand Whisper produit systematiquement le meme mot incorrect pour un terme technique.
+
+Exemple :
+```
+# Whisper entend "au cercle" au lieu de "OCM"
+au cercle -> OCM
+
+# Corrections VoIP
+open cypes -> OpenSIPs
+camaïeu -> Kamailio
+
+# Corrections infra
+cubernétise -> Kubernetes
+gîte -> Git
+```
+
+> **Astuce** : dictez vos termes techniques plusieurs fois, notez les erreurs recurrentes de Whisper, puis ajoutez les corrections correspondantes. Combinez avec le vocabulaire pour un maximum de precision.
 
 ---
 
