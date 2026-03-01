@@ -6,8 +6,21 @@
 # Les lignes commençant par # sont ignorées.
 # La recherche est insensible à la casse.
 # Modifie ce fichier librement !
+#usual 
 
-# --- VoIP ---
+à la Rodon Bosch -> Alain rondenbosh 
+à la random box  -> Alain rondenbosh 
+Alain Ronan Bosch -> Alain rondenbosh 
+Germont -> Jamoulle 
+Frédéric Germont -> Frédéric Jamoulle 
+Frédéric Diamoune -> Frédéric Jamoulle
+Frédéric Gijamoula -> Frédéric Jamoulle
+Frédéric Dijamoul -> Frédéric Jamoulle
+Frédéric Jamoul -> Frédéric Jamoulle
+Frédéric Genoux -> Frédéric Jamoulle
+Frédéric Jamul  -> Frédéric Jamoulle
+
+à la random box# --- VoIP ---
 au cercle -> OCM
 open cypes -> OpenSIPs
 open SIPes -> OpenSIPs
