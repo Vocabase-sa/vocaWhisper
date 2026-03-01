@@ -13,6 +13,12 @@ from tkinter import ttk, messagebox
 
 import sounddevice as sd
 
+try:
+    from tokenizers import Tokenizer as HFTokenizer
+    _HAS_TOKENIZER = True
+except ImportError:
+    _HAS_TOKENIZER = False
+
 IS_WINDOWS = platform.system() == "Windows"
 IS_MAC = platform.system() == "Darwin"
 
@@ -54,6 +60,49 @@ MODEL_SIZES_GB = {
     "large-v3-turbo": 1.62,
     "distil-large-v2": 1.51, "distil-large-v3": 1.51,
 }
+
+
+# Limite de tokens pour l'initial_prompt de Whisper (n_text_ctx // 2 - 1)
+WHISPER_MAX_PROMPT_TOKENS = 224
+
+# Cache du tokenizer (chargé une seule fois)
+_tokenizer_cache = {"tokenizer": None, "loaded": False}
+
+
+def _load_tokenizer():
+    """Charge le tokenizer Whisper depuis le cache HuggingFace (une seule fois)."""
+    if _tokenizer_cache["loaded"]:
+        return _tokenizer_cache["tokenizer"]
+    _tokenizer_cache["loaded"] = True
+    if not _HAS_TOKENIZER:
+        return None
+    try:
+        hub_dir = _get_hf_hub_dir()
+        if not os.path.isdir(hub_dir):
+            return None
+        for root, _, files in os.walk(hub_dir):
+            if "tokenizer.json" in files:
+                tok = HFTokenizer.from_file(os.path.join(root, "tokenizer.json"))
+                _tokenizer_cache["tokenizer"] = tok
+                return tok
+    except Exception:
+        pass
+    return None
+
+
+def _count_vocab_tokens(text: str) -> int | None:
+    """Compte les tokens du vocabulaire comme Whisper le ferait."""
+    tok = _load_tokenizer()
+    if tok is None:
+        return None
+    # Reproduire le format envoyé à Whisper (mots séparés par ", ")
+    lines = text.strip().splitlines()
+    words = [l.strip() for l in lines if l.strip() and not l.strip().startswith("#")]
+    if not words:
+        return 0
+    prompt = ", ".join(words)
+    encoded = tok.encode(prompt)
+    return len(encoded.ids)
 
 
 def _get_hf_hub_dir() -> str:
@@ -404,6 +453,15 @@ class ConfigWindow:
 
         self.vocab_text.insert("1.0", load_vocab())
 
+        # Compteur de tokens
+        self.token_label = tk.Label(
+            tab_vocab, text="", font=("Segoe UI", 9), anchor="w",
+        )
+        self.token_label.pack(anchor="w", pady=(4, 0))
+        self._update_token_count()
+        # Mettre à jour le compteur à chaque modification du texte
+        self.vocab_text.bind("<<Modified>>", self._on_vocab_modified)
+
         # --- Onglet Corrections ---
         tab_corrections = ttk.Frame(notebook, padding=15)
         notebook.add(tab_corrections, text="Corrections")
@@ -460,6 +518,39 @@ class ConfigWindow:
             )
         else:
             self.model_warning_label.config(text="")
+
+    def _on_vocab_modified(self, _=None):
+        """Appelé quand le texte du vocabulaire change."""
+        if self.vocab_text.edit_modified():
+            self._update_token_count()
+            self.vocab_text.edit_modified(False)
+
+    def _update_token_count(self):
+        """Met à jour le compteur de tokens du vocabulaire."""
+        text = self.vocab_text.get("1.0", "end-1c")
+        token_count = _count_vocab_tokens(text)
+        max_tokens = WHISPER_MAX_PROMPT_TOKENS
+        if token_count is not None:
+            remaining = max_tokens - token_count
+            if remaining >= 0:
+                self.token_label.config(
+                    text=f"Tokens : {token_count} / {max_tokens} utilises   |   {remaining} restants",
+                    fg="#28a745",
+                )
+            else:
+                self.token_label.config(
+                    text=f"Tokens : {token_count} / {max_tokens} utilises   |   {abs(remaining)} en trop (sera tronque)",
+                    fg="#dc3545",
+                )
+        else:
+            # Pas de tokenizer disponible : estimation approximative
+            lines = text.strip().splitlines()
+            words = [l.strip() for l in lines if l.strip() and not l.strip().startswith("#")]
+            approx = len(", ".join(words).split()) if words else 0
+            self.token_label.config(
+                text=f"~{approx} mots (tokenizer non disponible, estimation)",
+                fg="#666666",
+            )
 
     def _update_gain_label(self, _=None):
         self.gain_label.config(text=f"x{self.gain_var.get():.1f}")
