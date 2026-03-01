@@ -561,12 +561,8 @@ def setup_hotkey_pynput():
             state.ctrl_pressed = True
         elif key == pynput_keyboard.Key.space and state.ctrl_pressed:
             threading.Thread(target=toggle_recording, daemon=True).start()
-        elif key == pynput_keyboard.Key.esc:
-            if state.settings_open:
-                return  # Ignorer Echap pendant que les paramètres sont ouverts
-            log("Echap pressé, fermeture...")
-            state.running = False
-            return False  # Arrête le listener
+        # Echap global supprimé : trop de fermetures accidentelles.
+        # Pour quitter : clic droit sur l'icône tray > Quitter.
 
     def on_release(key):
         if key == pynput_keyboard.Key.ctrl_l or key == pynput_keyboard.Key.ctrl_r:
@@ -776,7 +772,7 @@ def main():
     log("=" * 50)
     log("PRÊT ! Appuie sur Ctrl+Space pour dicter.")
     log("Le texte sera copié dans le presse-papier.")
-    log("Echap ou Ctrl+C pour quitter.")
+    log("Clic droit sur l'icône tray pour quitter.")
     log("=" * 50)
     print(flush=True)
 
