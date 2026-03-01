@@ -66,6 +66,8 @@ def _get_model_repo(model_name: str) -> str:
     """Retourne le repo HuggingFace pour un modèle faster-whisper."""
     REPO_OVERRIDES = {
         "large-v3-turbo": "deepdml/faster-whisper-large-v3-turbo",
+        "distil-large-v2": "Systran/faster-distil-whisper-large-v2",
+        "distil-large-v3": "Systran/faster-distil-whisper-large-v3",
     }
     return REPO_OVERRIDES.get(model_name, f"Systran/faster-whisper-{model_name}")
 
@@ -73,11 +75,16 @@ def _get_model_repo(model_name: str) -> str:
 def _get_model_cache_dir(model_name: str) -> str:
     """Retourne le chemin du cache HuggingFace pour ce modèle (cherche tous les orgs)."""
     hub_dir = _get_hf_hub_dir()
-    # Chercher n'importe quel org qui a ce modèle (Systran, deepdml, mobiuslabs, etc.)
-    suffix = f"faster-whisper-{model_name}"
     if os.path.isdir(hub_dir):
+        # D'abord, chercher le repo exact (via REPO_OVERRIDES)
+        repo_id = _get_model_repo(model_name)
+        exact_folder = f"models--{repo_id.replace('/', '--')}"
+        exact_path = os.path.join(hub_dir, exact_folder)
+        if os.path.isdir(exact_path):
+            return exact_path
+        # Sinon, chercher tout dossier contenant le nom du modèle
         for folder in os.listdir(hub_dir):
-            if folder.startswith("models--") and folder.endswith(suffix.replace("/", "--")):
+            if folder.startswith("models--") and model_name in folder:
                 return os.path.join(hub_dir, folder)
     # Fallback : construire le chemin par défaut
     repo_id = _get_model_repo(model_name)
