@@ -21,6 +21,11 @@ import logging
 IS_WINDOWS = platform.system() == "Windows"
 IS_MAC = platform.system() == "Darwin"
 
+# Sur Windows, définir un AppUserModelID pour notre icône dans la barre des tâches
+if IS_WINDOWS:
+    import ctypes
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("vocabase.vocawhisper")
+
 import numpy as np
 import sounddevice as sd
 import pyperclip

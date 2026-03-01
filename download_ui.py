@@ -6,6 +6,7 @@ téléchargement ou le chargement du modèle.
 Fonctionne dans un thread daemon séparé (même pattern que overlay_ui.py).
 """
 
+import os
 import platform
 import threading
 import time
@@ -13,6 +14,11 @@ import tkinter as tk
 from tkinter import ttk
 
 IS_WINDOWS = platform.system() == "Windows"
+
+# Sur Windows, définir un AppUserModelID pour notre icône dans la barre des tâches
+if IS_WINDOWS:
+    import ctypes
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("vocabase.vocawhisper.download")
 
 # --- Style ---
 BG_COLOR = "#1e1e2e"
@@ -53,6 +59,34 @@ class DownloadProgressWindow:
         self._thread = threading.Thread(target=self._run_tk, daemon=True)
         self._thread.start()
         self._ready.wait(timeout=5)
+
+    @staticmethod
+    def _set_window_icon(root):
+        """Définit l'icône de la fenêtre depuis icons/icon.ico (priorité .ico sur Windows)."""
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        icon_dir = os.path.join(base_dir, "icons")
+        # .ico en priorité (fonctionne pour la barre des tâches Windows)
+        for name in ("icon.ico", "icon_green.ico"):
+            path = os.path.join(icon_dir, name)
+            if os.path.isfile(path):
+                try:
+                    root.iconbitmap(path)
+                    return
+                except Exception:
+                    pass
+        # Fallback : .png via iconphoto
+        for name in ("icon.png", "icon_green.png"):
+            path = os.path.join(icon_dir, name)
+            if os.path.isfile(path):
+                try:
+                    from PIL import Image, ImageTk
+                    img = Image.open(path)
+                    photo = ImageTk.PhotoImage(img)
+                    root.iconphoto(True, photo)
+                    root._icon_ref = photo
+                    return
+                except Exception:
+                    pass
 
     # --- API publique (thread-safe) ---
 
@@ -201,6 +235,9 @@ class DownloadProgressWindow:
         root.configure(bg=BG_COLOR)
         root.resizable(False, False)
         root.attributes("-topmost", True)
+
+        # Icône de la fenêtre (Vocabase)
+        self._set_window_icon(root)
 
         # Centrer la fenêtre
         screen_w = root.winfo_screenwidth()

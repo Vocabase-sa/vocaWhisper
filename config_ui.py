@@ -22,6 +22,14 @@ except ImportError:
 IS_WINDOWS = platform.system() == "Windows"
 IS_MAC = platform.system() == "Darwin"
 
+# Sur Windows, définir un AppUserModelID pour que la barre des tâches
+# affiche notre icône au lieu de celle de pythonw.exe
+if IS_WINDOWS:
+    import ctypes
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+        ctypes.c_wchar_p("vocabase.vocawhisper.settings")
+    )
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 VOCAB_FILE = os.path.join(BASE_DIR, "vocabulaire.txt")
@@ -288,6 +296,114 @@ def save_corrections(text: str):
     print(f"[config_ui] Corrections sauvegardées !", flush=True)
 
 
+def _win32_set_taskbar_icon(root, ico_path):
+    """Force l'icône dans la barre des tâches Windows via Win32 API."""
+    try:
+        import ctypes
+        import ctypes.wintypes as wintypes
+
+        user32 = ctypes.windll.user32
+        shell32 = ctypes.windll.shell32
+        ole32 = ctypes.windll.ole32
+
+        hwnd = int(root.wm_frame(), 16)
+
+        # Charger et envoyer l'icône via WM_SETICON
+        WM_SETICON = 0x0080
+        IMAGE_ICON = 1
+        LR_LOADFROMFILE = 0x0010
+        LR_DEFAULTSIZE = 0x0040
+        hicon = user32.LoadImageW(
+            0, ico_path, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE
+        )
+        if hicon:
+            user32.SendMessageW(hwnd, WM_SETICON, 1, hicon)  # ICON_BIG
+            user32.SendMessageW(hwnd, WM_SETICON, 0, hicon)  # ICON_SMALL
+
+        # Définir l'AppUserModelID sur la fenêtre elle-même via IPropertyStore
+        # C'est ce qui fait que Windows 11 utilise NOTRE icône dans la taskbar
+        class GUID(ctypes.Structure):
+            _fields_ = [
+                ("Data1", ctypes.c_ulong),
+                ("Data2", ctypes.c_ushort),
+                ("Data3", ctypes.c_ushort),
+                ("Data4", ctypes.c_ubyte * 8),
+            ]
+
+        class PROPERTYKEY(ctypes.Structure):
+            _fields_ = [("fmtid", GUID), ("pid", ctypes.c_ulong)]
+
+        # PKEY_AppUserModel_ID = {9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}, 5
+        PKEY_AppUserModel_ID = PROPERTYKEY(
+            GUID(0x9F4C2855, 0x9F79, 0x4B39, (ctypes.c_ubyte * 8)(0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3)),
+            5,
+        )
+
+        # PKEY_AppUserModel_RelaunchIconResource = {9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}, 2
+        PKEY_AppUserModel_RelaunchIconResource = PROPERTYKEY(
+            GUID(0x9F4C2855, 0x9F79, 0x4B39, (ctypes.c_ubyte * 8)(0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3)),
+            2,
+        )
+
+        class PROPVARIANT(ctypes.Structure):
+            _fields_ = [
+                ("vt", ctypes.c_ushort),
+                ("wReserved1", ctypes.c_ushort),
+                ("wReserved2", ctypes.c_ushort),
+                ("wReserved3", ctypes.c_ushort),
+                ("pwszVal", ctypes.c_wchar_p),
+            ]
+
+        # IPropertyStore IID
+        IID_IPropertyStore = GUID(
+            0x886D8EEB, 0x8CF2, 0x4446,
+            (ctypes.c_ubyte * 8)(0x8D, 0x02, 0xCD, 0xBA, 0x1D, 0xBD, 0xCF, 0x99),
+        )
+
+        # SHGetPropertyStoreForWindow
+        SHGetPropertyStoreForWindow = shell32.SHGetPropertyStoreForWindow
+        SHGetPropertyStoreForWindow.argtypes = [
+            wintypes.HWND,
+            ctypes.POINTER(GUID),
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
+        SHGetPropertyStoreForWindow.restype = ctypes.HRESULT
+
+        pps = ctypes.c_void_p()
+        hr = SHGetPropertyStoreForWindow(hwnd, ctypes.byref(IID_IPropertyStore), ctypes.byref(pps))
+        if hr == 0 and pps.value:
+            # IPropertyStore::SetValue est à l'index 6 dans la vtable
+            vtable = ctypes.cast(pps, ctypes.POINTER(ctypes.c_void_p))
+            vtable = ctypes.cast(vtable[0], ctypes.POINTER(ctypes.c_void_p))
+
+            # SetValue(this, key, propvar)
+            SetValue = ctypes.CFUNCTYPE(
+                ctypes.HRESULT,
+                ctypes.c_void_p,
+                ctypes.POINTER(PROPERTYKEY),
+                ctypes.POINTER(PROPVARIANT),
+            )(vtable[6])
+
+            # Définir l'AppUserModelID
+            VT_LPWSTR = 31
+            pv = PROPVARIANT()
+            pv.vt = VT_LPWSTR
+            pv.pwszVal = "vocabase.vocawhisper.settings"
+            SetValue(pps, ctypes.byref(PKEY_AppUserModel_ID), ctypes.byref(pv))
+
+            # Définir l'icône de relaunch (utilisée par la taskbar)
+            pv2 = PROPVARIANT()
+            pv2.vt = VT_LPWSTR
+            pv2.pwszVal = ico_path + ",0"
+            SetValue(pps, ctypes.byref(PKEY_AppUserModel_RelaunchIconResource), ctypes.byref(pv2))
+
+            # Release
+            Release = ctypes.CFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vtable[2])
+            Release(pps)
+    except Exception:
+        pass
+
+
 class ConfigWindow:
     def __init__(self, on_close_callback=None):
         self.on_close_callback = on_close_callback
@@ -299,11 +415,8 @@ class ConfigWindow:
         self.root.resizable(True, True)
         self.root.minsize(520, 560)
 
-        # Icône de la fenêtre (optionnel)
-        try:
-            self.root.iconbitmap(default="")
-        except Exception:
-            pass
+        # Icône de la fenêtre (Vocabase)
+        self._set_window_icon()
 
         # Style
         style = ttk.Style()
@@ -506,6 +619,26 @@ class ConfigWindow:
 
     # Modèles qui ne supportent que l'anglais
     ENGLISH_ONLY_MODELS = {"distil-large-v2", "distil-large-v3"}
+
+    def _set_window_icon(self):
+        """Définit l'icône de la fenêtre et de la barre des tâches."""
+        icon_dir = os.path.join(BASE_DIR, "icons")
+        ico_path = None
+        for name in ("icon.ico", "icon_green.ico"):
+            path = os.path.join(icon_dir, name)
+            if os.path.isfile(path):
+                ico_path = os.path.abspath(path)
+                break
+        if ico_path is None:
+            return
+        try:
+            self.root.iconbitmap(ico_path)
+        except Exception:
+            pass
+        # Sur Windows, forcer l'icône dans la barre des tâches via Win32 API
+        if IS_WINDOWS:
+            self.root.update_idletasks()
+            _win32_set_taskbar_icon(self.root, ico_path)
 
     def _update_model_status(self):
         """Met à jour le label indiquant si le modèle est en local ou à télécharger."""
