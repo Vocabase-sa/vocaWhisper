@@ -302,7 +302,14 @@ class ConfigWindow:
         self.model_status_label = tk.Label(
             tab_general, text="", font=("Segoe UI", 9), anchor="w",
         )
-        self.model_status_label.grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 4), padx=(0, 0))
+        self.model_status_label.grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 0), padx=(0, 0))
+        row += 1
+
+        # Avertissement modèle anglais uniquement
+        self.model_warning_label = tk.Label(
+            tab_general, text="", font=("Segoe UI", 9), anchor="w", fg="#dc3545",
+        )
+        self.model_warning_label.grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 4), padx=(0, 0))
         self._update_model_status()
         model_combo.bind("<<ComboboxSelected>>", lambda e: self._update_model_status())
         row += 1
@@ -334,6 +341,7 @@ class ConfigWindow:
         lang_combo = ttk.Combobox(tab_general, textvariable=self.lang_var, state="readonly", width=18,
                                   values=["fr", "en", "de", "es", "nl", "it", "pt", "auto"])
         lang_combo.grid(row=row, column=1, sticky="w", pady=6, padx=(10, 0))
+        lang_combo.bind("<<ComboboxSelected>>", lambda e: self._update_model_status())
         row += 1
 
         # Gain audio
@@ -418,6 +426,9 @@ class ConfigWindow:
         # Fermeture fenêtre avec la croix = sauvegarde aussi
         self.root.protocol("WM_DELETE_WINDOW", self._save_and_close)
 
+    # Modèles qui ne supportent que l'anglais
+    ENGLISH_ONLY_MODELS = {"distil-large-v2", "distil-large-v3"}
+
     def _update_model_status(self):
         """Met à jour le label indiquant si le modèle est en local ou à télécharger."""
         model = self.model_var.get()
@@ -425,21 +436,30 @@ class ConfigWindow:
             cache_path = _get_model_cache_dir(model)
             size_gb = _get_dir_size_gb(cache_path)
             self.model_status_label.config(
-                text=f"  ✅  En local ({size_gb:.2f} Go)",
+                text=f"  \u2705  En local ({size_gb:.2f} Go)",
                 fg="#28a745",
             )
         else:
             expected_gb = MODEL_SIZES_GB.get(model, 0)
             if expected_gb > 0:
                 self.model_status_label.config(
-                    text=f"  ⬇  À télécharger (~{expected_gb:.1f} Go)",
+                    text=f"  \u2b07  \u00c0 t\u00e9l\u00e9charger (~{expected_gb:.1f} Go)",
                     fg="#dc3545",
                 )
             else:
                 self.model_status_label.config(
-                    text=f"  ⬇  À télécharger",
+                    text=f"  \u2b07  \u00c0 t\u00e9l\u00e9charger",
                     fg="#dc3545",
                 )
+
+        # Avertissement si modèle anglais uniquement + langue non anglaise
+        lang = self.lang_var.get() if hasattr(self, "lang_var") else "fr"
+        if model in self.ENGLISH_ONLY_MODELS and lang != "en":
+            self.model_warning_label.config(
+                text=f"  \u26a0  Ce mod\u00e8le ne supporte que l'anglais ! Utilisez large-v3 ou large-v3-turbo pour le fran\u00e7ais.",
+            )
+        else:
+            self.model_warning_label.config(text="")
 
     def _update_gain_label(self, _=None):
         self.gain_label.config(text=f"x{self.gain_var.get():.1f}")

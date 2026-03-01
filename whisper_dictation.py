@@ -727,6 +727,14 @@ def main():
     log(f"System tray : {'oui' if HAS_TRAY else 'non (installe pystray + Pillow)'}")
     log(f"Plateforme : {platform.system()} ({platform.machine()})")
 
+    # Avertissement si modèle distil avec langue non anglaise
+    ENGLISH_ONLY_MODELS = {"distil-large-v2", "distil-large-v3"}
+    if config["model_size"] in ENGLISH_ONLY_MODELS and config.get("language") != "en":
+        log("=" * 60)
+        log("ATTENTION : Le modèle distil ne supporte que l'anglais !")
+        log("Pour le français, utilisez large-v3 ou large-v3-turbo.")
+        log("=" * 60)
+
     # Attendre que le système soit prêt (GPU + audio)
     wait_for_system_ready()
 
