@@ -28,6 +28,7 @@ node red -> Node-RED
 Nordrad -> Node-RED
 moustiqueau -> Mosquitto
 mosquito -> Mosquitto
+Mais un jou -> Mais à jour
 
 # --- Infra ---
 dockere -> Docker
