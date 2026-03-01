@@ -315,28 +315,28 @@ class ConfigWindow:
 
         save_btn = tk.Button(
             btn_frame,
-            text="  SAUVEGARDER  ",
+            text=" Sauvegarder ",
             command=self._save_and_close,
             bg="#28a745",
             fg="white",
-            font=("Segoe UI", 11, "bold"),
+            font=("Segoe UI", 9),
             relief="flat",
-            padx=20,
-            pady=6,
+            padx=10,
+            pady=3,
             cursor="hand2",
         )
         save_btn.pack(side="right", padx=(5, 0))
 
         restart_btn = tk.Button(
             btn_frame,
-            text="  REDEMARRER  ",
+            text=" Redémarrer ",
             command=self._save_and_restart,
             bg="#dc3545",
             fg="white",
-            font=("Segoe UI", 11, "bold"),
+            font=("Segoe UI", 9),
             relief="flat",
-            padx=20,
-            pady=6,
+            padx=10,
+            pady=3,
             cursor="hand2",
         )
         restart_btn.pack(side="right", padx=(5, 0))
