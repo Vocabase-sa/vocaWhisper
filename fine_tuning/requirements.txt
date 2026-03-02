@@ -1,0 +1,14 @@
+# Dépendances pour le fine-tuning de Whisper
+# Installer avec : pip install -r fine_tuning/requirements.txt
+
+torch>=2.0
+transformers>=4.39
+datasets>=2.18,<3.0
+accelerate>=0.27
+evaluate>=0.4
+jiwer>=3.0
+tensorboard>=2.15
+soundfile>=0.12
+librosa>=0.10
+ctranslate2>=4.0
+huggingface_hub>=0.21
