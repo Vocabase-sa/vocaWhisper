@@ -8,6 +8,7 @@ import os
 import platform
 import subprocess
 import sys
+import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -412,9 +413,9 @@ class ConfigWindow:
 
         self.root = tk.Tk()
         self.root.title("Whisper Dictation - Paramètres")
-        self.root.geometry("520x560")
+        self.root.geometry("600x650")
         self.root.resizable(True, True)
-        self.root.minsize(520, 560)
+        self.root.minsize(600, 600)
 
         # Icône de la fenêtre (Vocabase)
         self._set_window_icon()
@@ -638,6 +639,12 @@ class ConfigWindow:
 
         self.corrections_text.insert("1.0", load_corrections())
 
+        # --- Onglet Training (Fine-tuning) ---
+        tab_training = ttk.Frame(notebook, padding=10)
+        notebook.add(tab_training, text="Training")
+        self._training_process = None  # Subprocess en cours
+        self._build_training_tab(tab_training)
+
         # Fermeture fenêtre avec la croix = sauvegarde aussi
         self.root.protocol("WM_DELETE_WINDOW", self._save_and_close)
 
@@ -673,6 +680,245 @@ class ConfigWindow:
         )
         if path:
             self.custom_model_var.set(path)
+
+    # =================================================================
+    # Onglet Training
+    # =================================================================
+    def _build_training_tab(self, parent):
+        """Construit l'interface de l'onglet Training."""
+        FINE_TUNING_DIR = os.path.join(BASE_DIR, "fine_tuning")
+        DATA_DIR = os.path.join(FINE_TUNING_DIR, "data")
+
+        # --- Section 1 : Données ---
+        sec_data = ttk.LabelFrame(parent, text="  1. Données  ", padding=8)
+        sec_data.pack(fill="x", pady=(0, 6))
+
+        # CSV
+        row_csv = ttk.Frame(sec_data)
+        row_csv.pack(fill="x", pady=2)
+        ttk.Label(row_csv, text="Fichier CSV :", width=14).pack(side="left")
+        self.train_csv_var = tk.StringVar(value=os.path.join(DATA_DIR, "transcriptions.csv"))
+        ttk.Entry(row_csv, textvariable=self.train_csv_var, width=40).pack(side="left", fill="x", expand=True, padx=(4, 0))
+        tk.Button(row_csv, text="...", command=lambda: self._browse_file(
+            self.train_csv_var, "CSV", [("CSV", "*.csv"), ("Tous", "*.*")],
+        ), font=("Segoe UI", 8), padx=4, cursor="hand2").pack(side="left", padx=(4, 0))
+
+        # Audio dir
+        row_audio = ttk.Frame(sec_data)
+        row_audio.pack(fill="x", pady=2)
+        ttk.Label(row_audio, text="Dossier audio :", width=14).pack(side="left")
+        self.train_audio_var = tk.StringVar(value=os.path.join(DATA_DIR, "audio"))
+        ttk.Entry(row_audio, textvariable=self.train_audio_var, width=40).pack(side="left", fill="x", expand=True, padx=(4, 0))
+        tk.Button(row_audio, text="...", command=lambda: self._browse_dir(
+            self.train_audio_var, "Dossier audio",
+        ), font=("Segoe UI", 8), padx=4, cursor="hand2").pack(side="left", padx=(4, 0))
+
+        # Test split + bouton Préparer
+        row_prep = ttk.Frame(sec_data)
+        row_prep.pack(fill="x", pady=(4, 0))
+        ttk.Label(row_prep, text="Split test :", width=14).pack(side="left")
+        self.train_test_size_var = tk.StringVar(value="0.1")
+        ttk.Entry(row_prep, textvariable=self.train_test_size_var, width=6).pack(side="left", padx=(4, 0))
+        ttk.Label(row_prep, text="(0.0 - 0.5)").pack(side="left", padx=(4, 0))
+        tk.Button(
+            row_prep, text="Préparer le dataset", command=self._run_prepare,
+            bg="#0d6efd", fg="white", font=("Segoe UI", 9, "bold"),
+            relief="flat", padx=8, pady=2, cursor="hand2",
+        ).pack(side="right")
+
+        # --- Section 2 : Entraînement ---
+        sec_train = ttk.LabelFrame(parent, text="  2. Entraînement  ", padding=8)
+        sec_train.pack(fill="x", pady=(0, 6))
+
+        # Ligne 1 : Modèle de base
+        row_base = ttk.Frame(sec_train)
+        row_base.pack(fill="x", pady=2)
+        ttk.Label(row_base, text="Modèle de base :", width=14).pack(side="left")
+        self.train_base_model_var = tk.StringVar(value="openai/whisper-large-v3")
+        base_combo = ttk.Combobox(row_base, textvariable=self.train_base_model_var, width=38, values=[
+            "openai/whisper-large-v3",
+            "bofenghuang/whisper-large-v3-french",
+            "openai/whisper-large-v2",
+            "openai/whisper-medium",
+        ])
+        base_combo.pack(side="left", padx=(4, 0))
+
+        # Ligne 2 : Époques, Batch, LR
+        row_params = ttk.Frame(sec_train)
+        row_params.pack(fill="x", pady=2)
+        ttk.Label(row_params, text="Époques :", width=14).pack(side="left")
+        self.train_epochs_var = tk.StringVar(value="3")
+        ttk.Entry(row_params, textvariable=self.train_epochs_var, width=4).pack(side="left", padx=(4, 0))
+        ttk.Label(row_params, text="  Batch :").pack(side="left", padx=(8, 0))
+        self.train_batch_var = tk.StringVar(value="8")
+        ttk.Entry(row_params, textvariable=self.train_batch_var, width=4).pack(side="left", padx=(4, 0))
+        ttk.Label(row_params, text="  LR :").pack(side="left", padx=(8, 0))
+        self.train_lr_var = tk.StringVar(value="1e-5")
+        ttk.Entry(row_params, textvariable=self.train_lr_var, width=8).pack(side="left", padx=(4, 0))
+
+        # Bouton Lancer
+        row_launch = ttk.Frame(sec_train)
+        row_launch.pack(fill="x", pady=(4, 0))
+        tk.Button(
+            row_launch, text="Lancer l'entraînement", command=self._run_train,
+            bg="#28a745", fg="white", font=("Segoe UI", 9, "bold"),
+            relief="flat", padx=8, pady=2, cursor="hand2",
+        ).pack(side="right")
+
+        # --- Section 3 : Conversion CTranslate2 ---
+        sec_convert = ttk.LabelFrame(parent, text="  3. Conversion CTranslate2  ", padding=8)
+        sec_convert.pack(fill="x", pady=(0, 6))
+
+        row_conv = ttk.Frame(sec_convert)
+        row_conv.pack(fill="x", pady=2)
+        ttk.Label(row_conv, text="Quantization :", width=14).pack(side="left")
+        self.train_quant_var = tk.StringVar(value="float16")
+        ttk.Combobox(row_conv, textvariable=self.train_quant_var, state="readonly", width=16, values=[
+            "float16", "float32", "int8", "int8_float16",
+        ]).pack(side="left", padx=(4, 0))
+        tk.Button(
+            row_conv, text="Convertir", command=self._run_convert,
+            bg="#6f42c1", fg="white", font=("Segoe UI", 9, "bold"),
+            relief="flat", padx=8, pady=2, cursor="hand2",
+        ).pack(side="right")
+
+        # --- Zone de log ---
+        log_frame = ttk.LabelFrame(parent, text="  Journal  ", padding=4)
+        log_frame.pack(fill="both", expand=True, pady=(0, 0))
+
+        log_inner = ttk.Frame(log_frame)
+        log_inner.pack(fill="both", expand=True)
+
+        log_scroll = ttk.Scrollbar(log_inner)
+        log_scroll.pack(side="right", fill="y")
+
+        self.train_log = tk.Text(
+            log_inner, wrap="word", font=("Consolas", 9), height=8,
+            bg="#1e1e1e", fg="#d4d4d4", insertbackground="#d4d4d4",
+            yscrollcommand=log_scroll.set, state="disabled",
+        )
+        self.train_log.pack(fill="both", expand=True)
+        log_scroll.config(command=self.train_log.yview)
+
+        # Bouton Arrêter (caché par défaut)
+        self._stop_frame = ttk.Frame(log_frame)
+        self._stop_frame.pack(fill="x", pady=(4, 0))
+        self._stop_btn = tk.Button(
+            self._stop_frame, text="Arrêter le processus", command=self._stop_training_process,
+            bg="#dc3545", fg="white", font=("Segoe UI", 9),
+            relief="flat", padx=8, pady=2, cursor="hand2",
+        )
+        # Pas de pack ici — affiché dynamiquement
+
+    def _log_training(self, text: str):
+        """Ajoute du texte dans le journal de l'onglet Training."""
+        self.train_log.config(state="normal")
+        self.train_log.insert("end", text)
+        self.train_log.see("end")
+        self.train_log.config(state="disabled")
+
+    def _browse_file(self, var: tk.StringVar, title: str, filetypes: list):
+        """Ouvre un dialogue pour sélectionner un fichier."""
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            title=title,
+            initialdir=os.path.join(BASE_DIR, "fine_tuning", "data"),
+            filetypes=filetypes,
+        )
+        if path:
+            var.set(path)
+
+    def _browse_dir(self, var: tk.StringVar, title: str):
+        """Ouvre un dialogue pour sélectionner un dossier."""
+        from tkinter import filedialog
+        path = filedialog.askdirectory(
+            title=title,
+            initialdir=os.path.join(BASE_DIR, "fine_tuning", "data"),
+        )
+        if path:
+            var.set(path)
+
+    def _run_subprocess(self, cmd: list[str], label: str):
+        """Lance un sous-processus et redirige sa sortie vers le journal."""
+        if self._training_process is not None and self._training_process.poll() is None:
+            messagebox.showwarning("Processus en cours", "Un processus est déjà en cours d'exécution.")
+            return
+
+        self._log_training(f"\n{'='*50}\n  {label}\n{'='*50}\n")
+        self._log_training(f"  > {' '.join(cmd)}\n\n")
+
+        # Afficher le bouton Arrêter
+        self._stop_btn.pack(side="right")
+
+        def _run():
+            try:
+                self._training_process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    cwd=BASE_DIR,
+                    bufsize=1,
+                )
+                for line in self._training_process.stdout:
+                    # Thread-safe update via after()
+                    self.root.after(0, self._log_training, line)
+                self._training_process.wait()
+                exit_code = self._training_process.returncode
+                if exit_code == 0:
+                    self.root.after(0, self._log_training, f"\n  [OK] {label} terminé avec succès !\n")
+                else:
+                    self.root.after(0, self._log_training, f"\n  [ERREUR] {label} échoué (code {exit_code})\n")
+            except Exception as e:
+                self.root.after(0, self._log_training, f"\n  [ERREUR] {e}\n")
+            finally:
+                self._training_process = None
+                self.root.after(0, lambda: self._stop_btn.pack_forget())
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _stop_training_process(self):
+        """Arrête le processus en cours."""
+        if self._training_process and self._training_process.poll() is None:
+            self._training_process.terminate()
+            self._log_training("\n  [STOP] Processus arrêté par l'utilisateur.\n")
+
+    def _run_prepare(self):
+        """Lance la préparation du dataset."""
+        python = sys.executable
+        script = os.path.join(BASE_DIR, "fine_tuning", "prepare_dataset.py")
+        cmd = [
+            python, script,
+            "--csv", self.train_csv_var.get(),
+            "--audio_dir", self.train_audio_var.get(),
+            "--test_size", self.train_test_size_var.get(),
+        ]
+        self._run_subprocess(cmd, "Préparation du dataset")
+
+    def _run_train(self):
+        """Lance l'entraînement."""
+        python = sys.executable
+        script = os.path.join(BASE_DIR, "fine_tuning", "train.py")
+        cmd = [
+            python, script,
+            "--base_model", self.train_base_model_var.get(),
+            "--epochs", self.train_epochs_var.get(),
+            "--batch_size", self.train_batch_var.get(),
+            "--learning_rate", self.train_lr_var.get(),
+        ]
+        self._run_subprocess(cmd, "Fine-tuning Whisper")
+
+    def _run_convert(self):
+        """Lance la conversion CTranslate2."""
+        python = sys.executable
+        script = os.path.join(BASE_DIR, "fine_tuning", "convert_to_ct2.py")
+        cmd = [
+            python, script,
+            "--quantization", self.train_quant_var.get(),
+        ]
+        self._run_subprocess(cmd, "Conversion CTranslate2")
 
     def _update_custom_model_status(self):
         """Met à jour l'indicateur du modèle personnalisé."""
