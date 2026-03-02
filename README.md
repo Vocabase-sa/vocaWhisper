@@ -312,13 +312,17 @@ gite -> Git
 
 Permet d'entrainer le modele Whisper sur vos propres enregistrements audio pour ameliorer la reconnaissance de votre vocabulaire specifique (termes techniques, noms propres, jargon metier).
 
-> **Note** : Les dependances de fine-tuning (~5 Go avec PyTorch) sont installees automatiquement au premier lancement depuis l'onglet Training.
+> **Note** : Au premier lancement depuis l'onglet Training, les dependances supplementaires (~5 Go) sont installees automatiquement. Vous n'avez rien a faire, attendez simplement que l'installation se termine dans le Journal.
+
+#### Principe
+
+Le fine-tuning reentraine le modele Whisper avec vos propres enregistrements vocaux. Plus vous fournissez d'exemples audio de votre vocabulaire specifique, mieux le modele le reconnaitra. Le processus se fait en 3 etapes depuis l'interface, sans aucune ligne de commande.
 
 #### Etape 1 : Preparer les donnees
 
-1. Enregistrez des phrases contenant votre vocabulaire specifique (fichiers `.wav`)
-2. Placez les fichiers audio dans `fine_tuning/data/audio/`
-3. Creez un fichier CSV `fine_tuning/data/transcriptions.csv` avec le format :
+1. **Enregistrez** des phrases contenant votre vocabulaire specifique (fichiers `.wav` ou `.mp3`)
+2. **Placez** les fichiers audio dans le dossier `fine_tuning/data/audio/`
+3. **Creez** un fichier CSV `fine_tuning/data/transcriptions.csv` avec le format :
 
 ```csv
 audio_file,transcription
@@ -327,31 +331,65 @@ audio_file,transcription
 003.wav,"Frederic Jamoulle travaille sur le projet Vocabase."
 ```
 
-4. Cliquez sur **Preparer le dataset** dans l'onglet Training
+4. Dans l'onglet Training, verifiez que les champs **Fichier CSV** et **Dossier audio** pointent vers vos fichiers
+5. Cliquez sur **Preparer le dataset**
+
+Le Journal affiche la progression. Une fois termine, vos donnees sont pretes pour l'entrainement.
+
+> **Combien de donnees ?** Minimum **50 phrases** pour des resultats visibles. Avec 5-10 phrases, le modele fonctionne mais les ameliorations seront limitees. Idealement, visez **100+ phrases** couvrant votre vocabulaire.
 
 #### Etape 2 : Lancer l'entrainement
 
 | Parametre | Description | Valeur recommandee |
 |-----------|-------------|--------------------|
-| **Modele de base** | Modele Whisper a fine-tuner | `openai/whisper-large-v3` |
-| **Epoques** | Nombre de passes sur les donnees | `3` (peu de donnees) a `10` (beaucoup) |
-| **Batch size** | Exemples par iteration | `4` (16 Go VRAM) ou `8` (24 Go VRAM) |
-| **Learning rate** | Vitesse d'apprentissage | `1e-5` (recommande) |
+| **Modele de base** | Modele Whisper a fine-tuner | `bofenghuang/whisper-large-v3-french` (francais) ou `openai/whisper-large-v3` (multilingue) |
+| **Epoques** | Nombre de passes sur les donnees | `3` (peu de donnees) a `10` (beaucoup de donnees) |
+| **Batch size** | Exemples traites par iteration | `4` (16 Go VRAM) ou `8` (24 Go VRAM) |
+| **Learning rate** | Vitesse d'apprentissage | `1e-5` (recommande, ne pas modifier sauf si necessaire) |
 
-Cliquez sur **Lancer l'entrainement**. L'encoder est automatiquement gele pour eviter le "catastrophic forgetting", seul le decoder est fine-tune.
+Cliquez sur **Lancer l'entrainement**. Le Journal affiche :
+- La configuration utilisee (modele, device, VRAM, etc.)
+- Le chargement du dataset et du processeur audio
+- La preparation des features audio (barre de progression `Map`)
+- L'avancement de chaque epoque avec le **loss** (erreur du modele, doit diminuer)
+- La sauvegarde du modele final
 
-> **Combien de donnees ?** Minimum 50 phrases pour des resultats visibles. Avec 5-10 phrases, le modele fonctionne mais les ameliorations seront limitees. Idealement, visez quelques heures d'audio.
+> **Duree** : Environ 30 secondes par epoque pour 5 exemples sur RTX 4090. Le temps augmente lineairement avec le nombre d'exemples.
 
-#### Etape 3 : Convertir et utiliser
+L'encoder est automatiquement gele pour eviter le "catastrophic forgetting" (perte des connaissances du modele original). Seul le decoder est fine-tune, ce qui est suffisant pour apprendre votre vocabulaire.
 
-1. Cliquez sur **Convertir** pour generer le modele au format CTranslate2 (compatible faster-whisper)
-2. Le chemin du modele converti (`fine_tuning/model_ct2/`) est automatiquement disponible
-3. Dans l'onglet **General**, entrez ce chemin dans le champ **Modele personnalise**
-4. Redemarrez Vocabase
+#### Etape 3 : Convertir le modele
 
-#### Utilisation en ligne de commande
+Une fois l'entrainement termine, le modele doit etre converti au format **CTranslate2** pour etre utilise par Vocabase (faster-whisper).
+
+1. Selectionnez la quantization **float16** (recommande pour GPU, reduit la taille du modele de moitie sans perte de qualite)
+2. Cliquez sur **Convertir**
+3. Le Journal affiche la progression de la conversion
+
+| Quantization | Usage | Taille approximative |
+|-------------|-------|---------------------|
+| **float16** | GPU (NVIDIA, Apple Silicon) — **recommande** | ~3 Go |
+| **float32** | Maximum de precision (rarement necessaire) | ~6 Go |
+| **int8** | CPU (plus compact, leger) | ~1.5 Go |
+
+#### Etape 4 : Utiliser le modele fine-tune
+
+1. Le modele converti se trouve dans `fine_tuning/model_ct2/`
+2. Ouvrez l'onglet **General** des parametres
+3. Dans le champ **Modele personnalise**, entrez le chemin : `fine_tuning/model_ct2`
+4. Cliquez sur **Sauvegarder** puis **Redemarrer**
+
+Vocabase utilisera desormais votre modele fine-tune. Pour revenir au modele standard, videz le champ **Modele personnalise** et redemarrez.
+
+#### Utilisation en ligne de commande (optionnel)
+
+Le fine-tuning peut aussi etre lance en ligne de commande :
 
 ```bash
+# Activer l'environnement virtuel
+# Windows : venv\Scripts\activate.bat
+# macOS/Linux : source venv/bin/activate
+
 # 1. Preparer le dataset
 python fine_tuning/prepare_dataset.py
 
@@ -369,7 +407,7 @@ python fine_tuning/convert_to_ct2.py --quantization float16
 | Windows + NVIDIA | CUDA | Pleinement supporte |
 | Linux + NVIDIA | CUDA | Pleinement supporte |
 | macOS Apple Silicon | MPS | Supporte (plus lent) |
-| Tout OS sans GPU | CPU | Supporte (lent, petits datasets) |
+| Tout OS sans GPU | CPU | Supporte (lent, petits datasets uniquement) |
 
 ---
 
