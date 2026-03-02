@@ -3,7 +3,7 @@
 
 torch>=2.0
 transformers>=4.39
-datasets>=2.18
+datasets>=2.18,<3.0
 accelerate>=0.27
 evaluate>=0.4
 jiwer>=3.0

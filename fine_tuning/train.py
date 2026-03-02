@@ -156,10 +156,14 @@ def main():
     print(f"  Grad accum     : {args.gradient_accumulation}")
     print(f"  Learning rate  : {args.learning_rate}")
     print(f"  Langue         : {args.language}")
-    print(f"  GPU            : {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
     if torch.cuda.is_available():
-        vram = torch.cuda.get_device_properties(0).total_mem / 1e9
+        print(f"  Device         : {torch.cuda.get_device_name(0)} (CUDA)")
+        vram = torch.cuda.get_device_properties(0).total_memory / 1e9
         print(f"  VRAM           : {vram:.1f} Go")
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        print("  Device         : Apple Silicon (MPS)")
+    else:
+        print("  Device         : CPU")
     print()
 
     # --- Charger le dataset ---
@@ -201,12 +205,18 @@ def main():
 
     # --- Charger le modèle ---
     print(f"\n  Chargement du modèle {args.base_model}...")
-    model = WhisperForConditionalGeneration.from_pretrained(args.base_model)
+    model = WhisperForConditionalGeneration.from_pretrained(
+        args.base_model, torch_dtype=torch.float32
+    )
 
     # Configurer pour le français
     model.generation_config.language = args.language
     model.generation_config.task = args.task
     model.generation_config.forced_decoder_ids = None
+
+    # Geler l'encoder pour éviter le catastrophic forgetting (surtout avec peu de données)
+    model.freeze_encoder()
+    print("  [INFO] Encoder gelé — seul le decoder sera fine-tuné")
 
     # --- Data Collator ---
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(
@@ -226,7 +236,8 @@ def main():
         learning_rate=args.learning_rate,
         warmup_steps=args.warmup_steps,
         num_train_epochs=args.epochs,
-        fp16=torch.cuda.is_available(),
+        fp16=False,  # Désactivé : fp16 cause des erreurs de gradient scaling
+        bf16=False,  # Note : bf16 corrompt les poids à la sauvegarde sur certaines configs
         eval_strategy="epoch" if "test" in dataset else "no",
         save_strategy="epoch",
         logging_steps=25,
@@ -238,7 +249,7 @@ def main():
         predict_with_generate=True,
         generation_max_length=225,
         save_total_limit=3,
-        dataloader_num_workers=0,  # Éviter les problèmes sur Windows
+        dataloader_num_workers=0,  # 0 = plus stable sur toutes les plateformes
         remove_unused_columns=False,
     )
 

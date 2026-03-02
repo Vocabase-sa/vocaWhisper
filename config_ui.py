@@ -838,6 +838,38 @@ class ConfigWindow:
         if path:
             var.set(path)
 
+    def _install_deps_if_needed(self) -> bool:
+        """Vérifie et installe les dépendances fine-tuning si nécessaire.
+
+        Retourne True si tout est OK, False si l'installation a échoué.
+        """
+        python = sys.executable
+        # Vérifier rapidement si les packages clés sont présents
+        check = subprocess.run(
+            [python, "-c", "import transformers, datasets, evaluate, accelerate, ctranslate2"],
+            capture_output=True, text=True,
+        )
+        if check.returncode == 0:
+            return True  # Tout est déjà installé
+
+        # Installation nécessaire
+        self.root.after(0, self._log_training, "  Installation des dépendances fine-tuning...\n")
+        req_file = os.path.join(BASE_DIR, "fine_tuning", "requirements.txt")
+        proc = subprocess.Popen(
+            [python, "-m", "pip", "install", "-r", req_file],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding="utf-8", errors="replace", bufsize=1,
+        )
+        for line in proc.stdout:
+            self.root.after(0, self._log_training, f"  {line}")
+        proc.wait()
+        if proc.returncode == 0:
+            self.root.after(0, self._log_training, "  [OK] Dépendances installées.\n\n")
+            return True
+        else:
+            self.root.after(0, self._log_training, "  [ERREUR] Installation des dépendances échouée.\n")
+            return False
+
     def _run_subprocess(self, cmd: list[str], label: str):
         """Lance un sous-processus et redirige sa sortie vers le journal."""
         if self._training_process is not None and self._training_process.poll() is None:
@@ -852,6 +884,10 @@ class ConfigWindow:
 
         def _run():
             try:
+                # Installer les dépendances si nécessaire
+                if not self._install_deps_if_needed():
+                    self.root.after(0, lambda: self._stop_btn.pack_forget())
+                    return
                 self._training_process = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,

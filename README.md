@@ -15,6 +15,7 @@ Utilise [faster-whisper](https://github.com/SYSTRAN/faster-whisper) avec acceler
 - **Collage automatique** : le texte transcrit est colle directement dans l'application active
 - **Vocabulaire personnalise** : ajoutez des mots techniques pour ameliorer la reconnaissance
 - **Corrections automatiques** : regles de post-traitement pour corriger les erreurs recurrentes
+- **Fine-tuning Whisper** : entrainez le modele sur vos propres donnees audio pour ameliorer la reconnaissance de votre vocabulaire
 - **Icone system tray** : acces rapide aux parametres et controle de l'application
 - **Overlay futuriste** : pilule flottante avec indicateur REC, timer et barres audio animees en temps reel
 - **Choix du microphone** : selection du peripherique audio dans les parametres
@@ -216,7 +217,7 @@ Ou utilisez les parametres via l'icone system tray (clic droit > Parametres).
 
 Un clic droit sur l'icone dans la barre des taches donne acces a :
 
-- **Parametres** : ouvre la fenetre de configuration (onglets General, Vocabulaire, Corrections)
+- **Parametres** : ouvre la fenetre de configuration (onglets General, Vocabulaire, Corrections, Training)
 - **Quitter** : ferme l'application
 
 L'icone change de couleur : **verte** = pret, **rouge** = enregistrement en cours.
@@ -307,6 +308,69 @@ gite -> Git
 
 > **Astuce** : dictez vos termes techniques plusieurs fois, notez les erreurs recurrentes de Whisper, puis ajoutez les corrections correspondantes. Combinez avec le vocabulaire pour un maximum de precision.
 
+### Onglet Training (Fine-tuning)
+
+Permet d'entrainer le modele Whisper sur vos propres enregistrements audio pour ameliorer la reconnaissance de votre vocabulaire specifique (termes techniques, noms propres, jargon metier).
+
+> **Note** : Les dependances de fine-tuning (~5 Go avec PyTorch) sont installees automatiquement au premier lancement depuis l'onglet Training.
+
+#### Etape 1 : Preparer les donnees
+
+1. Enregistrez des phrases contenant votre vocabulaire specifique (fichiers `.wav`)
+2. Placez les fichiers audio dans `fine_tuning/data/audio/`
+3. Creez un fichier CSV `fine_tuning/data/transcriptions.csv` avec le format :
+
+```csv
+audio_file,transcription
+001.wav,"Bonjour, je teste le fine-tuning de Whisper."
+002.wav,"OpenSIPs est un serveur SIP open source."
+003.wav,"Frederic Jamoulle travaille sur le projet Vocabase."
+```
+
+4. Cliquez sur **Preparer le dataset** dans l'onglet Training
+
+#### Etape 2 : Lancer l'entrainement
+
+| Parametre | Description | Valeur recommandee |
+|-----------|-------------|--------------------|
+| **Modele de base** | Modele Whisper a fine-tuner | `openai/whisper-large-v3` |
+| **Epoques** | Nombre de passes sur les donnees | `3` (peu de donnees) a `10` (beaucoup) |
+| **Batch size** | Exemples par iteration | `4` (16 Go VRAM) ou `8` (24 Go VRAM) |
+| **Learning rate** | Vitesse d'apprentissage | `1e-5` (recommande) |
+
+Cliquez sur **Lancer l'entrainement**. L'encoder est automatiquement gele pour eviter le "catastrophic forgetting", seul le decoder est fine-tune.
+
+> **Combien de donnees ?** Minimum 50 phrases pour des resultats visibles. Avec 5-10 phrases, le modele fonctionne mais les ameliorations seront limitees. Idealement, visez quelques heures d'audio.
+
+#### Etape 3 : Convertir et utiliser
+
+1. Cliquez sur **Convertir** pour generer le modele au format CTranslate2 (compatible faster-whisper)
+2. Le chemin du modele converti (`fine_tuning/model_ct2/`) est automatiquement disponible
+3. Dans l'onglet **General**, entrez ce chemin dans le champ **Modele personnalise**
+4. Redemarrez Vocabase
+
+#### Utilisation en ligne de commande
+
+```bash
+# 1. Preparer le dataset
+python fine_tuning/prepare_dataset.py
+
+# 2. Entrainer (GPU NVIDIA recommande)
+python fine_tuning/train.py --epochs 3 --batch_size 8
+
+# 3. Convertir en CTranslate2
+python fine_tuning/convert_to_ct2.py --quantization float16
+```
+
+#### Compatibilite
+
+| Plateforme | Device | Support |
+|------------|--------|---------|
+| Windows + NVIDIA | CUDA | Pleinement supporte |
+| Linux + NVIDIA | CUDA | Pleinement supporte |
+| macOS Apple Silicon | MPS | Supporte (plus lent) |
+| Tout OS sans GPU | CPU | Supporte (lent, petits datasets) |
+
 ---
 
 ## Structure du projet
@@ -321,6 +385,12 @@ vocaWhisper/
 ├── vocabulaire.txt        # Mots personnalises pour Whisper
 ├── corrections.txt        # Regles de correction post-transcription
 ├── requirements.txt       # Dependances Python
+├── fine_tuning/           # Pipeline de fine-tuning Whisper
+│   ├── prepare_dataset.py # Preparation du dataset audio
+│   ├── train.py           # Entrainement du modele
+│   ├── convert_to_ct2.py  # Conversion vers CTranslate2
+│   ├── requirements.txt   # Dependances fine-tuning
+│   └── data/              # Donnees d'entrainement (audio + CSV)
 ├── icons/                 # Icones personnalisees (icon_green.png, icon_red.png)
 ├── install_windows.bat    # Script d'installation Windows
 ├── install_mac.sh         # Script d'installation macOS
