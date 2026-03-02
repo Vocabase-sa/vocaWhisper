@@ -493,8 +493,8 @@ class ConfigWindow:
         model_combo.bind("<<ComboboxSelected>>", lambda e: self._update_model_status())
         row += 1
 
-        # Modèle personnalisé (fine-tuné)
-        ttk.Label(tab_general, text="Modèle fine-tuné :").grid(row=row, column=0, sticky="w", pady=6)
+        # Modèle personnalisé (fine-tuné) — prioritaire sur le modèle standard
+        ttk.Label(tab_general, text="Modèle fine-tuné\n(prioritaire) :").grid(row=row, column=0, sticky="w", pady=6)
         custom_frame = ttk.Frame(tab_general)
         custom_frame.grid(row=row, column=1, columnspan=2, sticky="ew", pady=6, padx=(10, 0))
         self.custom_model_var = tk.StringVar(value=self.cfg.get("custom_model_path", ""))
@@ -961,7 +961,7 @@ class ConfigWindow:
         path = self.custom_model_var.get().strip()
         if not path:
             self.custom_model_status.config(
-                text="  (vide = utilise le modèle standard ci-dessus)",
+                text="  Modèle actif : standard (sélectionné ci-dessus)",
                 fg="#666666",
             )
         elif os.path.isdir(path):
@@ -970,7 +970,7 @@ class ConfigWindow:
             if os.path.isfile(model_bin):
                 size_gb = os.path.getsize(model_bin) / 1e9
                 self.custom_model_status.config(
-                    text=f"  \u2705  Modèle CTranslate2 trouvé ({size_gb:.2f} Go) — *redémarrage requis",
+                    text=f"  \u2705  Modèle actif : fine-tuné ({size_gb:.2f} Go) — le modèle standard est ignoré — *redémarrage requis",
                     fg="#28a745",
                 )
             else:
