@@ -82,6 +82,7 @@ CHANNELS = 1
 
 DEFAULTS = {
     "model_size": "large-v3",
+    "custom_model_path": "",
     "device": "cuda",
     "compute_type": "float16",
     "language": "fr",
@@ -344,8 +345,19 @@ def load_model():
 
     Affiche une fenêtre de progression si un téléchargement ou un chargement
     long est nécessaire, pour que l'utilisateur sache que l'app travaille.
+
+    Supporte un chemin personnalisé (modèle fine-tuné) via config["custom_model_path"].
     """
-    model = config["model_size"]
+    # Utiliser le modèle personnalisé (fine-tuné) s'il est configuré
+    custom_path = config.get("custom_model_path", "").strip()
+    if custom_path and os.path.isdir(custom_path):
+        model = custom_path
+        log(f"[CUSTOM] Utilisation du modèle fine-tuné : {custom_path}")
+    else:
+        model = config["model_size"]
+        if custom_path:
+            log(f"[WARN] Chemin modèle personnalisé introuvable : {custom_path}")
+            log(f"       Fallback sur le modèle standard : {model}")
     device = config["device"]
     compute = config["compute_type"]
 

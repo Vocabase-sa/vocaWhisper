@@ -1,0 +1,6 @@
+audio_file,transcription
+001.wav,"Bonjour, je teste le fine-tuning de Whisper avec mon vocabulaire technique."
+002.wav,"OpenSIPs est un serveur SIP open source très performant."
+003.wav,"J'ai configuré Kamailio avec une base de données PostgreSQL."
+004.wav,"Le cluster Kubernetes fonctionne correctement avec Node-RED et Mosquitto."
+005.wav,"Frédéric Jamoulle travaille sur le projet Vocabase."

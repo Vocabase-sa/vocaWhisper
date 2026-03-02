@@ -37,6 +37,7 @@ CORRECTIONS_FILE = os.path.join(BASE_DIR, "corrections.txt")
 
 DEFAULTS = {
     "model_size": "large-v3",
+    "custom_model_path": "",
     "device": "cuda",
     "compute_type": "float16",
     "language": "fr",
@@ -491,6 +492,29 @@ class ConfigWindow:
         model_combo.bind("<<ComboboxSelected>>", lambda e: self._update_model_status())
         row += 1
 
+        # Modèle personnalisé (fine-tuné)
+        ttk.Label(tab_general, text="Modèle fine-tuné :").grid(row=row, column=0, sticky="w", pady=6)
+        custom_frame = ttk.Frame(tab_general)
+        custom_frame.grid(row=row, column=1, columnspan=2, sticky="ew", pady=6, padx=(10, 0))
+        self.custom_model_var = tk.StringVar(value=self.cfg.get("custom_model_path", ""))
+        custom_entry = ttk.Entry(custom_frame, textvariable=self.custom_model_var, width=35)
+        custom_entry.pack(side="left", fill="x", expand=True)
+        browse_btn = tk.Button(
+            custom_frame, text="...", command=self._browse_custom_model,
+            font=("Segoe UI", 9), padx=6, cursor="hand2",
+        )
+        browse_btn.pack(side="left", padx=(4, 0))
+        row += 1
+
+        # Indicateur modèle personnalisé
+        self.custom_model_status = tk.Label(
+            tab_general, text="", font=("Segoe UI", 8), anchor="w", fg="#666666",
+        )
+        self.custom_model_status.grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 4), padx=(0, 0))
+        self._update_custom_model_status()
+        self.custom_model_var.trace_add("write", lambda *_: self._update_custom_model_status())
+        row += 1
+
         # Device
         ttk.Label(tab_general, text="Device :").grid(row=row, column=0, sticky="w", pady=6)
         self.device_var = tk.StringVar(value=self.cfg["device"])
@@ -640,6 +664,44 @@ class ConfigWindow:
             self.root.update_idletasks()
             _win32_set_taskbar_icon(self.root, ico_path)
 
+    def _browse_custom_model(self):
+        """Ouvre un dialogue pour sélectionner le dossier du modèle fine-tuné."""
+        from tkinter import filedialog
+        path = filedialog.askdirectory(
+            title="Sélectionner le dossier du modèle fine-tuné (CTranslate2)",
+            initialdir=os.path.join(BASE_DIR, "fine_tuning"),
+        )
+        if path:
+            self.custom_model_var.set(path)
+
+    def _update_custom_model_status(self):
+        """Met à jour l'indicateur du modèle personnalisé."""
+        path = self.custom_model_var.get().strip()
+        if not path:
+            self.custom_model_status.config(
+                text="  (vide = utilise le modèle standard ci-dessus)",
+                fg="#666666",
+            )
+        elif os.path.isdir(path):
+            # Vérifier si c'est un modèle CTranslate2 valide
+            model_bin = os.path.join(path, "model.bin")
+            if os.path.isfile(model_bin):
+                size_gb = os.path.getsize(model_bin) / 1e9
+                self.custom_model_status.config(
+                    text=f"  \u2705  Modèle CTranslate2 trouvé ({size_gb:.2f} Go) — *redémarrage requis",
+                    fg="#28a745",
+                )
+            else:
+                self.custom_model_status.config(
+                    text="  \u26a0  Dossier trouvé mais pas de model.bin (pas un modèle CTranslate2 ?)",
+                    fg="#ff8c00",
+                )
+        else:
+            self.custom_model_status.config(
+                text=f"  \u274c  Dossier introuvable : {path}",
+                fg="#dc3545",
+            )
+
     def _update_model_status(self):
         """Met à jour le label indiquant si le modèle est en local ou à télécharger."""
         model = self.model_var.get()
@@ -715,6 +777,7 @@ class ConfigWindow:
                 self.model_var.get() != self.cfg["model_size"]
                 or self.device_var.get() != self.cfg["device"]
                 or self.compute_var.get() != self.cfg["compute_type"]
+                or self.custom_model_var.get().strip() != self.cfg.get("custom_model_path", "")
             )
 
             # Sauvegarder config
@@ -726,6 +789,7 @@ class ConfigWindow:
 
             new_cfg = {
                 "model_size": self.model_var.get(),
+                "custom_model_path": self.custom_model_var.get().strip(),
                 "device": self.device_var.get(),
                 "compute_type": self.compute_var.get(),
                 "language": lang if lang != "auto" else None,
@@ -781,6 +845,7 @@ class ConfigWindow:
 
             new_cfg = {
                 "model_size": self.model_var.get(),
+                "custom_model_path": self.custom_model_var.get().strip(),
                 "device": self.device_var.get(),
                 "compute_type": self.compute_var.get(),
                 "language": lang if lang != "auto" else None,
