@@ -493,27 +493,39 @@ class ConfigWindow:
         model_combo.bind("<<ComboboxSelected>>", lambda e: self._update_model_status())
         row += 1
 
-        # Modèle personnalisé (fine-tuné) — prioritaire sur le modèle standard
-        ttk.Label(tab_general, text="Modèle fine-tuné\n(prioritaire) :").grid(row=row, column=0, sticky="w", pady=6)
-        custom_frame = ttk.Frame(tab_general)
-        custom_frame.grid(row=row, column=1, columnspan=2, sticky="ew", pady=6, padx=(10, 0))
+        # Checkbox modèle fine-tuné
+        self.use_finetuned_var = tk.BooleanVar(value=bool(self.cfg.get("custom_model_path", "").strip()))
         self.custom_model_var = tk.StringVar(value=self.cfg.get("custom_model_path", ""))
-        custom_entry = ttk.Entry(custom_frame, textvariable=self.custom_model_var, width=35)
-        custom_entry.pack(side="left", fill="x", expand=True)
-        browse_btn = tk.Button(
-            custom_frame, text="...", command=self._browse_custom_model,
+        self.use_finetuned_cb = ttk.Checkbutton(
+            tab_general, text="Utiliser un modèle fine-tuné",
+            variable=self.use_finetuned_var, command=self._toggle_finetuned,
+        )
+        self.use_finetuned_cb.grid(row=row, column=0, columnspan=3, sticky="w", pady=(10, 2))
+        row += 1
+
+        # Chemin du modèle fine-tuné
+        self.custom_model_frame = ttk.Frame(tab_general)
+        self.custom_model_frame.grid(row=row, column=0, columnspan=3, sticky="ew", pady=(0, 2), padx=(20, 0))
+        self.custom_entry = ttk.Entry(self.custom_model_frame, textvariable=self.custom_model_var, width=45)
+        self.custom_entry.pack(side="left", fill="x", expand=True)
+        self.custom_browse_btn = tk.Button(
+            self.custom_model_frame, text="...", command=self._browse_custom_model,
             font=("Segoe UI", 9), padx=6, cursor="hand2",
         )
-        browse_btn.pack(side="left", padx=(4, 0))
+        self.custom_browse_btn.pack(side="left", padx=(4, 0))
         row += 1
 
         # Indicateur modèle personnalisé
         self.custom_model_status = tk.Label(
             tab_general, text="", font=("Segoe UI", 8), anchor="w", fg="#666666",
         )
-        self.custom_model_status.grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 4), padx=(0, 0))
-        self._update_custom_model_status()
+        self.custom_model_status.grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 4), padx=(20, 0))
         self.custom_model_var.trace_add("write", lambda *_: self._update_custom_model_status())
+
+        # Références aux widgets modèle standard pour les griser
+        self.model_combo = model_combo
+        # Appliquer l'état initial
+        self._toggle_finetuned()
         row += 1
 
         # Device
@@ -956,12 +968,31 @@ class ConfigWindow:
         ]
         self._run_subprocess(cmd, "Conversion CTranslate2")
 
+    def _toggle_finetuned(self):
+        """Active/désactive le modèle fine-tuné et grise la combobox standard en conséquence."""
+        use_ft = self.use_finetuned_var.get()
+        if use_ft:
+            # Griser le modèle standard
+            self.model_combo.config(state="disabled")
+            self.custom_entry.config(state="normal")
+            self.custom_browse_btn.config(state="normal")
+            self._update_custom_model_status()
+        else:
+            # Réactiver le modèle standard, désactiver le chemin fine-tuné
+            self.model_combo.config(state="readonly")
+            self.custom_entry.config(state="disabled")
+            self.custom_browse_btn.config(state="disabled")
+            self.custom_model_status.config(text="", fg="#666666")
+
     def _update_custom_model_status(self):
         """Met à jour l'indicateur du modèle personnalisé."""
+        if not self.use_finetuned_var.get():
+            self.custom_model_status.config(text="", fg="#666666")
+            return
         path = self.custom_model_var.get().strip()
         if not path:
             self.custom_model_status.config(
-                text="  Modèle actif : standard (sélectionné ci-dessus)",
+                text="  Sélectionnez le dossier du modèle CTranslate2",
                 fg="#666666",
             )
         elif os.path.isdir(path):
@@ -970,12 +1001,12 @@ class ConfigWindow:
             if os.path.isfile(model_bin):
                 size_gb = os.path.getsize(model_bin) / 1e9
                 self.custom_model_status.config(
-                    text=f"  \u2705  Modèle actif : fine-tuné ({size_gb:.2f} Go) — le modèle standard est ignoré — *redémarrage requis",
+                    text=f"  \u2705  Modèle CTranslate2 trouvé ({size_gb:.2f} Go) — *redémarrage requis",
                     fg="#28a745",
                 )
             else:
                 self.custom_model_status.config(
-                    text="  \u26a0  Dossier trouvé mais pas de model.bin (pas un modèle CTranslate2 ?)",
+                    text="  \u26a0  Dossier trouvé mais pas de model.bin",
                     fg="#ff8c00",
                 )
         else:
@@ -1059,7 +1090,7 @@ class ConfigWindow:
                 self.model_var.get() != self.cfg["model_size"]
                 or self.device_var.get() != self.cfg["device"]
                 or self.compute_var.get() != self.cfg["compute_type"]
-                or self.custom_model_var.get().strip() != self.cfg.get("custom_model_path", "")
+                or (self.custom_model_var.get().strip() if self.use_finetuned_var.get() else "") != self.cfg.get("custom_model_path", "")
             )
 
             # Sauvegarder config
@@ -1071,7 +1102,7 @@ class ConfigWindow:
 
             new_cfg = {
                 "model_size": self.model_var.get(),
-                "custom_model_path": self.custom_model_var.get().strip(),
+                "custom_model_path": self.custom_model_var.get().strip() if self.use_finetuned_var.get() else "",
                 "device": self.device_var.get(),
                 "compute_type": self.compute_var.get(),
                 "language": lang if lang != "auto" else None,
@@ -1127,7 +1158,7 @@ class ConfigWindow:
 
             new_cfg = {
                 "model_size": self.model_var.get(),
-                "custom_model_path": self.custom_model_var.get().strip(),
+                "custom_model_path": self.custom_model_var.get().strip() if self.use_finetuned_var.get() else "",
                 "device": self.device_var.get(),
                 "compute_type": self.compute_var.get(),
                 "language": lang if lang != "auto" else None,
