@@ -1,7 +1,5 @@
 # VocaWhisper
 
-Clone open-source de [SuperWhisper](https://superwhisper.com/) pour **Windows**, **macOS** et **Linux**.
-
 Dictez du texte par la voix avec un raccourci clavier global (**Ctrl+Space**), le texte transcrit est automatiquement copie dans le presse-papier et colle dans l'application active.
 
 Utilise [faster-whisper](https://github.com/SYSTRAN/faster-whisper) avec acceleration GPU (CUDA / Apple MPS) ou CPU.
