@@ -946,8 +946,30 @@ class ConfigWindow:
         self._run_subprocess(cmd, "Préparation du dataset")
 
     def _run_train(self):
-        """Lance l'entraînement."""
+        """Lance l'entraînement après vérification GPU."""
         python = sys.executable
+
+        # Vérifier la présence d'un GPU (CUDA ou MPS)
+        gpu_check = subprocess.run(
+            [python, "-c",
+             "import torch; "
+             "ok = torch.cuda.is_available() or (hasattr(torch.backends,'mps') and torch.backends.mps.is_available()); "
+             "print('cuda' if torch.cuda.is_available() else ('mps' if ok else 'none'))"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        gpu = gpu_check.stdout.strip() if gpu_check.returncode == 0 else "none"
+
+        if gpu == "none":
+            from tkinter import messagebox
+            messagebox.showwarning(
+                "GPU requis",
+                "Aucun GPU détecté (CUDA ou Apple MPS).\n\n"
+                "Le fine-tuning nécessite un GPU NVIDIA (CUDA) "
+                "ou Apple Silicon (MPS).\n\n"
+                "L'entraînement sur CPU n'est pas supporté."
+            )
+            return
+
         script = os.path.join(BASE_DIR, "fine_tuning", "train.py")
         cmd = [
             python, script,
