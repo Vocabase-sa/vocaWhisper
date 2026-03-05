@@ -439,7 +439,11 @@ vocaWhisper/
 
 ## Logs
 
-Les logs sont ecrits dans `whisper_dictation.log` a la racine du projet. Ce fichier est utile pour diagnostiquer les problemes (erreurs micro, GPU, modele, etc.).
+Tous les logs sont centralises dans le dossier `logs/` :
+
+- `logs/whisper_dictation.log` — logs de l'application de dictee (erreurs micro, GPU, modele, etc.)
+- `logs/transcribe.log` — progression du batch de transcription
+- `logs/transcribe_err.log` — erreurs du batch de transcription
 
 ---
 
@@ -454,7 +458,7 @@ Les logs sont ecrits dans `whisper_dictation.log` a la racine du projet. Ce fich
 | Parametres ne s'ouvrent pas | Verifiez les logs ; l'interface se lance dans un processus separe |
 | Modele distil ne transcrit pas le francais | Les modeles `distil` ne supportent que l'anglais. Utilisez `large-v3` ou `large-v3-turbo` |
 | Modele affiche "a telecharger" alors qu'il est present | Le nom du cache peut varier selon l'org. Mettez a jour vers la derniere version |
-| L'app se ferme toute seule | Verifiez les logs (`whisper_dictation.log`) pour identifier la cause |
+| L'app se ferme toute seule | Verifiez les logs (`logs/whisper_dictation.log`) pour identifier la cause |
 
 ---
 

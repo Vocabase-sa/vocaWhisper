@@ -190,3 +190,22 @@ nul
 
 # HuggingFace cache
 .cache/
+
+# Donnees audio (trop volumineux, ~130K fichiers WAV)
+fine_tuning/data/audio/
+
+# Output fine-tuning (checkpoints, modele final, runs)
+fine_tuning/output/
+
+# Modele CTranslate2 converti
+fine_tuning/model_ct2/
+
+# Dataset prepare (genere par prepare_dataset.py)
+fine_tuning/dataset_prepared/
+
+# Logs
+logs/
+
+# Fichiers de donnees generees (specifiques a l'environnement)
+corrections.txt
+vocabulaire.txt

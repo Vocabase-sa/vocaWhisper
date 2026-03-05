@@ -57,7 +57,9 @@ except ImportError:
 # Configuration (chargée depuis config.json)
 # =============================================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_FILE = os.path.join(BASE_DIR, "whisper_dictation.log")
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, "whisper_dictation.log")
 
 # Configurer le logging fichier (indispensable avec pythonw.exe qui masque stdout/stderr)
 logging.basicConfig(
