@@ -614,53 +614,64 @@ class ConfigWindow:
                         variable=self.autostart_var).grid(row=row, column=0, columnspan=3, sticky="w", pady=6)
         row += 1
 
-        # --- Section API HTTP ---
-        ttk.Separator(tab_general).grid(row=row, column=0, columnspan=3, sticky="ew", pady=(12, 6))
-        row += 1
+        # --- Onglet Réseau (API + RTP) ---
+        tab_network = ttk.Frame(notebook, padding=15)
+        notebook.add(tab_network, text="Réseau")
+
+        nrow = 0
+
+        # === Section API HTTP ===
+        ttk.Label(tab_network, text="API HTTP", font=("Segoe UI", 10, "bold")).grid(
+            row=nrow, column=0, columnspan=3, sticky="w", pady=(0, 4))
+        nrow += 1
 
         self.api_enabled_var = tk.BooleanVar(value=self.cfg.get("api_enabled", False))
         ttk.Checkbutton(
-            tab_general, text="Activer l'API HTTP (transcription)",
+            tab_network, text="Activer l'API HTTP (transcription)",
             variable=self.api_enabled_var, command=self._toggle_api_fields,
-        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=6)
-        ttk.Label(tab_general, text="*redémarrage requis", foreground="gray").grid(row=row, column=2, padx=(5, 0))
-        row += 1
+        ).grid(row=nrow, column=0, columnspan=2, sticky="w", pady=6)
+        ttk.Label(tab_network, text="*redémarrage requis", foreground="gray").grid(row=nrow, column=2, padx=(5, 0))
+        nrow += 1
 
-        ttk.Label(tab_general, text="Adresse :").grid(row=row, column=0, sticky="w", pady=4)
+        ttk.Label(tab_network, text="Adresse :").grid(row=nrow, column=0, sticky="w", pady=4)
         self.api_host_var = tk.StringVar(value=self.cfg.get("api_host", "0.0.0.0"))
-        self.api_host_entry = ttk.Entry(tab_general, textvariable=self.api_host_var, width=18)
-        self.api_host_entry.grid(row=row, column=1, sticky="w", pady=4, padx=(10, 0))
-        row += 1
+        self.api_host_entry = ttk.Entry(tab_network, textvariable=self.api_host_var, width=18)
+        self.api_host_entry.grid(row=nrow, column=1, sticky="w", pady=4, padx=(10, 0))
+        nrow += 1
 
-        ttk.Label(tab_general, text="Port :").grid(row=row, column=0, sticky="w", pady=4)
+        ttk.Label(tab_network, text="Port :").grid(row=nrow, column=0, sticky="w", pady=4)
         self.api_port_var = tk.StringVar(value=str(self.cfg.get("api_port", 5000)))
-        self.api_port_entry = ttk.Entry(tab_general, textvariable=self.api_port_var, width=8)
-        self.api_port_entry.grid(row=row, column=1, sticky="w", pady=4, padx=(10, 0))
-        row += 1
+        self.api_port_entry = ttk.Entry(tab_network, textvariable=self.api_port_var, width=8)
+        self.api_port_entry.grid(row=nrow, column=1, sticky="w", pady=4, padx=(10, 0))
+        nrow += 1
 
         self._toggle_api_fields()
 
-        # --- Section RTP Streaming ---
-        ttk.Separator(tab_general).grid(row=row, column=0, columnspan=3, sticky="ew", pady=(12, 6))
-        row += 1
+        # === Section RTP Streaming ===
+        ttk.Separator(tab_network).grid(row=nrow, column=0, columnspan=3, sticky="ew", pady=(14, 8))
+        nrow += 1
+
+        ttk.Label(tab_network, text="Streaming RTP (téléphonie)", font=("Segoe UI", 10, "bold")).grid(
+            row=nrow, column=0, columnspan=3, sticky="w", pady=(0, 4))
+        nrow += 1
 
         self.rtp_enabled_var = tk.BooleanVar(value=self.cfg.get("rtp_enabled", False))
         ttk.Checkbutton(
-            tab_general, text="Activer le streaming RTP (téléphonie)",
+            tab_network, text="Activer le streaming RTP",
             variable=self.rtp_enabled_var, command=self._toggle_rtp_fields,
-        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=6)
-        ttk.Label(tab_general, text="*redémarrage requis", foreground="gray").grid(row=row, column=2, padx=(5, 0))
-        row += 1
+        ).grid(row=nrow, column=0, columnspan=2, sticky="w", pady=6)
+        ttk.Label(tab_network, text="*redémarrage requis", foreground="gray").grid(row=nrow, column=2, padx=(5, 0))
+        nrow += 1
 
-        ttk.Label(tab_general, text="Port UDP :").grid(row=row, column=0, sticky="w", pady=4)
+        ttk.Label(tab_network, text="Port UDP :").grid(row=nrow, column=0, sticky="w", pady=4)
         self.rtp_port_var = tk.StringVar(value=str(self.cfg.get("rtp_port", 5002)))
-        self.rtp_port_entry = ttk.Entry(tab_general, textvariable=self.rtp_port_var, width=8)
-        self.rtp_port_entry.grid(row=row, column=1, sticky="w", pady=4, padx=(10, 0))
-        row += 1
+        self.rtp_port_entry = ttk.Entry(tab_network, textvariable=self.rtp_port_var, width=8)
+        self.rtp_port_entry.grid(row=nrow, column=1, sticky="w", pady=4, padx=(10, 0))
+        nrow += 1
 
-        ttk.Label(tab_general, text="Pool Whisper :").grid(row=row, column=0, sticky="w", pady=4)
-        pool_frame = ttk.Frame(tab_general)
-        pool_frame.grid(row=row, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
+        ttk.Label(tab_network, text="Pool Whisper :").grid(row=nrow, column=0, sticky="w", pady=4)
+        pool_frame = ttk.Frame(tab_network)
+        pool_frame.grid(row=nrow, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
         self.rtp_pool_var = tk.IntVar(value=self.cfg.get("rtp_pool_size", 2))
         self.rtp_pool_spin = ttk.Spinbox(
             pool_frame, from_=1, to=5, textvariable=self.rtp_pool_var, width=4,
@@ -668,36 +679,36 @@ class ConfigWindow:
         self.rtp_pool_spin.pack(side="left")
         self.rtp_pool_hint = ttk.Label(pool_frame, text="modèle(s)  (~3 GB VRAM chacun)", foreground="gray")
         self.rtp_pool_hint.pack(side="left", padx=(6, 0))
-        row += 1
+        nrow += 1
 
-        ttk.Label(tab_general, text="Langue RTP :").grid(row=row, column=0, sticky="w", pady=4)
+        ttk.Label(tab_network, text="Langue RTP :").grid(row=nrow, column=0, sticky="w", pady=4)
         self.rtp_lang_var = tk.StringVar(value=self.cfg.get("rtp_language", "fr"))
         self.rtp_lang_combo = ttk.Combobox(
-            tab_general, textvariable=self.rtp_lang_var, width=6, state="readonly",
+            tab_network, textvariable=self.rtp_lang_var, width=6, state="readonly",
             values=["fr", "en", "de", "es", "it", "nl", "pt", "auto"],
         )
-        self.rtp_lang_combo.grid(row=row, column=1, sticky="w", pady=4, padx=(10, 0))
-        row += 1
+        self.rtp_lang_combo.grid(row=nrow, column=1, sticky="w", pady=4, padx=(10, 0))
+        nrow += 1
 
-        ttk.Label(tab_general, text="Webhook URL :").grid(row=row, column=0, sticky="w", pady=4)
+        ttk.Label(tab_network, text="Webhook URL :").grid(row=nrow, column=0, sticky="w", pady=4)
         self.rtp_webhook_var = tk.StringVar(value=self.cfg.get("rtp_webhook_url", ""))
-        self.rtp_webhook_entry = ttk.Entry(tab_general, textvariable=self.rtp_webhook_var, width=40)
-        self.rtp_webhook_entry.grid(row=row, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
-        row += 1
+        self.rtp_webhook_entry = ttk.Entry(tab_network, textvariable=self.rtp_webhook_var, width=40)
+        self.rtp_webhook_entry.grid(row=nrow, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
+        nrow += 1
 
         self.rtp_record_var = tk.BooleanVar(value=self.cfg.get("rtp_record_wav", False))
         self.rtp_record_check = ttk.Checkbutton(
-            tab_general, text="Enregistrer les fichiers WAV",
+            tab_network, text="Enregistrer les fichiers WAV",
             variable=self.rtp_record_var, command=self._toggle_rtp_save_dir,
         )
-        self.rtp_record_check.grid(row=row, column=0, columnspan=2, sticky="w", pady=4)
-        row += 1
+        self.rtp_record_check.grid(row=nrow, column=0, columnspan=2, sticky="w", pady=4)
+        nrow += 1
 
-        ttk.Label(tab_general, text="Dossier :").grid(row=row, column=0, sticky="w", pady=4)
+        ttk.Label(tab_network, text="Dossier :").grid(row=nrow, column=0, sticky="w", pady=4)
         self.rtp_save_dir_var = tk.StringVar(value=self.cfg.get("rtp_save_dir", "./recordings"))
-        self.rtp_save_dir_entry = ttk.Entry(tab_general, textvariable=self.rtp_save_dir_var, width=30)
-        self.rtp_save_dir_entry.grid(row=row, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
-        row += 1
+        self.rtp_save_dir_entry = ttk.Entry(tab_network, textvariable=self.rtp_save_dir_var, width=30)
+        self.rtp_save_dir_entry.grid(row=nrow, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
+        nrow += 1
 
         self._toggle_rtp_fields()
 
