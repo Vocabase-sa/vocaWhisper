@@ -6,5 +6,15 @@
     "audio_gain": 10.0,
     "auto_paste": true,
     "auto_start": false,
-    "microphone": ""
+    "microphone": "",
+    "api_enabled": false,
+    "api_host": "0.0.0.0",
+    "api_port": 5000,
+    "rtp_enabled": false,
+    "rtp_port": 5002,
+    "rtp_pool_size": 2,
+    "rtp_webhook_url": "",
+    "rtp_record_wav": false,
+    "rtp_save_dir": "./recordings",
+    "rtp_language": "fr"
 }

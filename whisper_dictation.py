@@ -92,6 +92,16 @@ DEFAULTS = {
     "auto_paste": True,
     "auto_start": False,
     "microphone": "",
+    "api_enabled": False,
+    "api_host": "0.0.0.0",
+    "api_port": 5000,
+    "rtp_enabled": False,
+    "rtp_port": 5002,
+    "rtp_pool_size": 2,
+    "rtp_webhook_url": "",
+    "rtp_record_wav": False,
+    "rtp_save_dir": "./recordings",
+    "rtp_language": "fr",
 }
 
 
@@ -806,6 +816,18 @@ def main():
 
     print(flush=True)
 
+    # Démarrer l'API HTTP si activée
+    if config.get("api_enabled", False):
+        try:
+            from api.server import start_api_server
+            start_api_server(state, config, transcribe)
+            log(f"API HTTP active sur {config.get('api_host', '0.0.0.0')}:{config.get('api_port', 5000)}")
+        except Exception as e:
+            log(f"ERREUR démarrage API : {e}")
+            logging.exception("API server start failed")
+
+    print(flush=True)
+
     # Lancer le tray icon
     if HAS_TRAY:
         tray_thread = threading.Thread(target=run_tray, daemon=True)
@@ -835,6 +857,12 @@ def main():
         pass
     finally:
         log("Arrêt en cours...")
+        # Arrêter l'API HTTP
+        try:
+            from api.server import stop_api_server
+            stop_api_server()
+        except Exception:
+            pass
         if state.recording:
             stop_recording()
         if listener:

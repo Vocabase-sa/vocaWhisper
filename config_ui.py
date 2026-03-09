@@ -46,6 +46,9 @@ DEFAULTS = {
     "auto_paste": True,
     "auto_start": False,
     "microphone": "",
+    "api_enabled": False,
+    "api_host": "0.0.0.0",
+    "api_port": 5000,
 }
 
 
@@ -604,6 +607,32 @@ class ConfigWindow:
                         variable=self.autostart_var).grid(row=row, column=0, columnspan=3, sticky="w", pady=6)
         row += 1
 
+        # --- Section API HTTP ---
+        ttk.Separator(tab_general).grid(row=row, column=0, columnspan=3, sticky="ew", pady=(12, 6))
+        row += 1
+
+        self.api_enabled_var = tk.BooleanVar(value=self.cfg.get("api_enabled", False))
+        ttk.Checkbutton(
+            tab_general, text="Activer l'API HTTP (transcription)",
+            variable=self.api_enabled_var, command=self._toggle_api_fields,
+        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=6)
+        ttk.Label(tab_general, text="*redémarrage requis", foreground="gray").grid(row=row, column=2, padx=(5, 0))
+        row += 1
+
+        ttk.Label(tab_general, text="Adresse :").grid(row=row, column=0, sticky="w", pady=4)
+        self.api_host_var = tk.StringVar(value=self.cfg.get("api_host", "0.0.0.0"))
+        self.api_host_entry = ttk.Entry(tab_general, textvariable=self.api_host_var, width=18)
+        self.api_host_entry.grid(row=row, column=1, sticky="w", pady=4, padx=(10, 0))
+        row += 1
+
+        ttk.Label(tab_general, text="Port :").grid(row=row, column=0, sticky="w", pady=4)
+        self.api_port_var = tk.StringVar(value=str(self.cfg.get("api_port", 5000)))
+        self.api_port_entry = ttk.Entry(tab_general, textvariable=self.api_port_var, width=8)
+        self.api_port_entry.grid(row=row, column=1, sticky="w", pady=4, padx=(10, 0))
+        row += 1
+
+        self._toggle_api_fields()
+
         # --- Onglet Vocabulaire ---
         tab_vocab = ttk.Frame(notebook, padding=15)
         notebook.add(tab_vocab, text="Vocabulaire")
@@ -1037,6 +1066,13 @@ class ConfigWindow:
                 fg="#dc3545",
             )
 
+    def _toggle_api_fields(self):
+        """Active/désactive les champs API selon la checkbox."""
+        enabled = self.api_enabled_var.get()
+        state = "normal" if enabled else "disabled"
+        self.api_host_entry.config(state=state)
+        self.api_port_entry.config(state=state)
+
     def _update_model_status(self):
         """Met à jour le label indiquant si le modèle est en local ou à télécharger."""
         model = self.model_var.get()
@@ -1113,6 +1149,9 @@ class ConfigWindow:
                 or self.device_var.get() != self.cfg["device"]
                 or self.compute_var.get() != self.cfg["compute_type"]
                 or (self.custom_model_var.get().strip() if self.use_finetuned_var.get() else "") != self.cfg.get("custom_model_path", "")
+                or self.api_enabled_var.get() != self.cfg.get("api_enabled", False)
+                or self.api_host_var.get().strip() != self.cfg.get("api_host", "0.0.0.0")
+                or int(self.api_port_var.get()) != self.cfg.get("api_port", 5000)
             )
 
             # Sauvegarder config
@@ -1132,6 +1171,9 @@ class ConfigWindow:
                 "auto_paste": self.paste_var.get(),
                 "auto_start": auto_start,
                 "microphone": mic_value,
+                "api_enabled": self.api_enabled_var.get(),
+                "api_host": self.api_host_var.get().strip(),
+                "api_port": int(self.api_port_var.get()),
             }
             save_config(new_cfg)
 
@@ -1188,6 +1230,9 @@ class ConfigWindow:
                 "auto_paste": self.paste_var.get(),
                 "auto_start": auto_start,
                 "microphone": mic_value,
+                "api_enabled": self.api_enabled_var.get(),
+                "api_host": self.api_host_var.get().strip(),
+                "api_port": int(self.api_port_var.get()),
             }
             save_config(new_cfg)
 

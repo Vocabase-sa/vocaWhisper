@@ -5,3 +5,6 @@ keyboard
 pyperclip
 pystray
 Pillow
+flask
+requests
+text2num
