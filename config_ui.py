@@ -49,6 +49,13 @@ DEFAULTS = {
     "api_enabled": False,
     "api_host": "0.0.0.0",
     "api_port": 5000,
+    "rtp_enabled": False,
+    "rtp_port": 5002,
+    "rtp_pool_size": 2,
+    "rtp_webhook_url": "",
+    "rtp_record_wav": False,
+    "rtp_save_dir": "./recordings",
+    "rtp_language": "fr",
 }
 
 
@@ -633,6 +640,67 @@ class ConfigWindow:
 
         self._toggle_api_fields()
 
+        # --- Section RTP Streaming ---
+        ttk.Separator(tab_general).grid(row=row, column=0, columnspan=3, sticky="ew", pady=(12, 6))
+        row += 1
+
+        self.rtp_enabled_var = tk.BooleanVar(value=self.cfg.get("rtp_enabled", False))
+        ttk.Checkbutton(
+            tab_general, text="Activer le streaming RTP (téléphonie)",
+            variable=self.rtp_enabled_var, command=self._toggle_rtp_fields,
+        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=6)
+        ttk.Label(tab_general, text="*redémarrage requis", foreground="gray").grid(row=row, column=2, padx=(5, 0))
+        row += 1
+
+        ttk.Label(tab_general, text="Port UDP :").grid(row=row, column=0, sticky="w", pady=4)
+        self.rtp_port_var = tk.StringVar(value=str(self.cfg.get("rtp_port", 5002)))
+        self.rtp_port_entry = ttk.Entry(tab_general, textvariable=self.rtp_port_var, width=8)
+        self.rtp_port_entry.grid(row=row, column=1, sticky="w", pady=4, padx=(10, 0))
+        row += 1
+
+        ttk.Label(tab_general, text="Pool Whisper :").grid(row=row, column=0, sticky="w", pady=4)
+        pool_frame = ttk.Frame(tab_general)
+        pool_frame.grid(row=row, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
+        self.rtp_pool_var = tk.IntVar(value=self.cfg.get("rtp_pool_size", 2))
+        self.rtp_pool_spin = ttk.Spinbox(
+            pool_frame, from_=1, to=5, textvariable=self.rtp_pool_var, width=4,
+        )
+        self.rtp_pool_spin.pack(side="left")
+        self.rtp_pool_hint = ttk.Label(pool_frame, text="modèle(s)  (~3 GB VRAM chacun)", foreground="gray")
+        self.rtp_pool_hint.pack(side="left", padx=(6, 0))
+        row += 1
+
+        ttk.Label(tab_general, text="Langue RTP :").grid(row=row, column=0, sticky="w", pady=4)
+        self.rtp_lang_var = tk.StringVar(value=self.cfg.get("rtp_language", "fr"))
+        self.rtp_lang_combo = ttk.Combobox(
+            tab_general, textvariable=self.rtp_lang_var, width=6, state="readonly",
+            values=["fr", "en", "de", "es", "it", "nl", "pt", "auto"],
+        )
+        self.rtp_lang_combo.grid(row=row, column=1, sticky="w", pady=4, padx=(10, 0))
+        row += 1
+
+        ttk.Label(tab_general, text="Webhook URL :").grid(row=row, column=0, sticky="w", pady=4)
+        self.rtp_webhook_var = tk.StringVar(value=self.cfg.get("rtp_webhook_url", ""))
+        self.rtp_webhook_entry = ttk.Entry(tab_general, textvariable=self.rtp_webhook_var, width=40)
+        self.rtp_webhook_entry.grid(row=row, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
+        row += 1
+
+        self.rtp_record_var = tk.BooleanVar(value=self.cfg.get("rtp_record_wav", False))
+        self.rtp_record_check = ttk.Checkbutton(
+            tab_general, text="Enregistrer les fichiers WAV",
+            variable=self.rtp_record_var, command=self._toggle_rtp_save_dir,
+        )
+        self.rtp_record_check.grid(row=row, column=0, columnspan=2, sticky="w", pady=4)
+        row += 1
+
+        ttk.Label(tab_general, text="Dossier :").grid(row=row, column=0, sticky="w", pady=4)
+        self.rtp_save_dir_var = tk.StringVar(value=self.cfg.get("rtp_save_dir", "./recordings"))
+        self.rtp_save_dir_entry = ttk.Entry(tab_general, textvariable=self.rtp_save_dir_var, width=30)
+        self.rtp_save_dir_entry.grid(row=row, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
+        row += 1
+
+        self._toggle_rtp_fields()
+
         # --- Onglet Vocabulaire ---
         tab_vocab = ttk.Frame(notebook, padding=15)
         notebook.add(tab_vocab, text="Vocabulaire")
@@ -1073,6 +1141,24 @@ class ConfigWindow:
         self.api_host_entry.config(state=state)
         self.api_port_entry.config(state=state)
 
+    def _toggle_rtp_fields(self):
+        """Active/désactive les champs RTP selon la checkbox."""
+        enabled = self.rtp_enabled_var.get()
+        state = "normal" if enabled else "disabled"
+        readonly = "readonly" if enabled else "disabled"
+        self.rtp_port_entry.config(state=state)
+        self.rtp_pool_spin.config(state=state)
+        self.rtp_lang_combo.config(state=readonly)
+        self.rtp_webhook_entry.config(state=state)
+        self.rtp_record_check.config(state=state)
+        self._toggle_rtp_save_dir()
+
+    def _toggle_rtp_save_dir(self):
+        """Active/désactive le champ dossier WAV selon les checkboxes RTP."""
+        enabled = self.rtp_enabled_var.get() and self.rtp_record_var.get()
+        state = "normal" if enabled else "disabled"
+        self.rtp_save_dir_entry.config(state=state)
+
     def _update_model_status(self):
         """Met à jour le label indiquant si le modèle est en local ou à télécharger."""
         model = self.model_var.get()
@@ -1152,6 +1238,9 @@ class ConfigWindow:
                 or self.api_enabled_var.get() != self.cfg.get("api_enabled", False)
                 or self.api_host_var.get().strip() != self.cfg.get("api_host", "0.0.0.0")
                 or int(self.api_port_var.get()) != self.cfg.get("api_port", 5000)
+                or self.rtp_enabled_var.get() != self.cfg.get("rtp_enabled", False)
+                or int(self.rtp_port_var.get()) != self.cfg.get("rtp_port", 5002)
+                or self.rtp_pool_var.get() != self.cfg.get("rtp_pool_size", 2)
             )
 
             # Sauvegarder config
@@ -1174,6 +1263,13 @@ class ConfigWindow:
                 "api_enabled": self.api_enabled_var.get(),
                 "api_host": self.api_host_var.get().strip(),
                 "api_port": int(self.api_port_var.get()),
+                "rtp_enabled": self.rtp_enabled_var.get(),
+                "rtp_port": int(self.rtp_port_var.get()),
+                "rtp_pool_size": self.rtp_pool_var.get(),
+                "rtp_webhook_url": self.rtp_webhook_var.get().strip(),
+                "rtp_record_wav": self.rtp_record_var.get(),
+                "rtp_save_dir": self.rtp_save_dir_var.get().strip(),
+                "rtp_language": self.rtp_lang_var.get(),
             }
             save_config(new_cfg)
 
@@ -1233,6 +1329,13 @@ class ConfigWindow:
                 "api_enabled": self.api_enabled_var.get(),
                 "api_host": self.api_host_var.get().strip(),
                 "api_port": int(self.api_port_var.get()),
+                "rtp_enabled": self.rtp_enabled_var.get(),
+                "rtp_port": int(self.rtp_port_var.get()),
+                "rtp_pool_size": self.rtp_pool_var.get(),
+                "rtp_webhook_url": self.rtp_webhook_var.get().strip(),
+                "rtp_record_wav": self.rtp_record_var.get(),
+                "rtp_save_dir": self.rtp_save_dir_var.get().strip(),
+                "rtp_language": self.rtp_lang_var.get(),
             }
             save_config(new_cfg)
 
