@@ -57,3 +57,4 @@ NVIDIA
 RTX4090
 whisper
 large-v3
+Claude

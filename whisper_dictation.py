@@ -92,6 +92,9 @@ DEFAULTS = {
     "auto_paste": True,
     "auto_start": False,
     "microphone": "",
+    "stt_engine": "local",
+    "groq_api_key": "",
+    "groq_model": "whisper-large-v3-turbo",
     "api_enabled": False,
     "api_host": "0.0.0.0",
     "api_port": 5000,
@@ -359,7 +362,12 @@ def load_model():
     long est nécessaire, pour que l'utilisateur sache que l'app travaille.
 
     Supporte un chemin personnalisé (modèle fine-tuné) via config["custom_model_path"].
+    Si stt_engine="groq", aucun modèle local n'est chargé.
     """
+    if config.get("stt_engine") == "groq":
+        log("[Groq] Moteur cloud sélectionné — pas de modèle local à charger.")
+        state.model = None
+        return
     # Utiliser le modèle personnalisé (fine-tuné) s'il est configuré
     custom_path = config.get("custom_model_path", "").strip()
     if custom_path and os.path.isdir(custom_path):
@@ -511,11 +519,8 @@ def stop_recording() -> np.ndarray | None:
 # =============================================================================
 # Transcription
 # =============================================================================
-def transcribe(audio: np.ndarray) -> str:
-    """Transcrit l'audio avec faster-whisper."""
-    log("Transcription en cours...")
-    t0 = time.perf_counter()
-
+def _transcribe_local(audio: np.ndarray) -> str:
+    """Transcrit l'audio avec faster-whisper (local)."""
     prompt = load_vocabulary()
     segments, info = state.model.transcribe(
         audio,
@@ -530,10 +535,69 @@ def transcribe(audio: np.ndarray) -> str:
         text_parts.append(segment.text.strip())
 
     text = " ".join(text_parts).strip()
-    elapsed = time.perf_counter() - t0
-
-    log(f"Transcription terminée en {elapsed:.1f}s")
     log(f"Langue : {info.language} (confiance: {info.language_probability:.0%})")
+    return text
+
+
+def _transcribe_groq(audio: np.ndarray) -> str:
+    """Transcrit l'audio via l'API Groq Cloud."""
+    import io
+    import wave
+
+    api_key = config.get("groq_api_key", "").strip()
+    if not api_key:
+        raise ValueError("Clé API Groq non configurée. Ouvrez les paramètres pour la saisir.")
+
+    groq_model = config.get("groq_model", "whisper-large-v3-turbo")
+    language = config.get("language", "fr")
+
+    # Convertir numpy float32 → WAV bytes en mémoire
+    audio_int16 = np.clip(audio * 32767, -32768, 32767).astype(np.int16)
+    wav_buffer = io.BytesIO()
+    with wave.open(wav_buffer, "wb") as wf:
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(2)  # 16-bit
+        wf.setframerate(SAMPLE_RATE)
+        wf.writeframes(audio_int16.tobytes())
+    wav_buffer.seek(0)
+
+    from groq import Groq
+    client = Groq(api_key=api_key)
+
+    params = {
+        "file": ("audio.wav", wav_buffer, "audio/wav"),
+        "model": groq_model,
+        "response_format": "text",
+    }
+    if language and language != "auto":
+        params["language"] = language
+
+    prompt = load_vocabulary()
+    if prompt:
+        params["prompt"] = prompt
+
+    transcription = client.audio.transcriptions.create(**params)
+
+    # L'API retourne du texte brut quand response_format="text"
+    text = transcription.strip() if isinstance(transcription, str) else transcription.text.strip()
+    log(f"[Groq] Modèle: {groq_model}")
+    return text
+
+
+def transcribe(audio: np.ndarray) -> str:
+    """Transcrit l'audio avec le moteur configuré (local ou Groq)."""
+    engine = config.get("stt_engine", "local")
+    log(f"Transcription en cours ({engine})...")
+    t0 = time.perf_counter()
+
+    if engine == "groq":
+        text = _transcribe_groq(audio)
+    else:
+        text = _transcribe_local(audio)
+
+    elapsed = time.perf_counter() - t0
+    log(f"Transcription terminée en {elapsed:.1f}s")
+
     if text:
         log(f">>> {text}")
         text = apply_corrections(text)

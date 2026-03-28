@@ -24,17 +24,23 @@ def _create_app():
 
     @app.route("/health", methods=["GET"])
     def health():
-        model_loaded = _state is not None and _state.model is not None
+        engine = _config.get("stt_engine", "local") if _config else "local"
+        if engine == "groq":
+            model_ready = bool(_config.get("groq_api_key", "").strip())
+        else:
+            model_ready = _state is not None and _state.model is not None
         return jsonify({
             "status": "ok",
-            "model_loaded": model_loaded,
+            "model_loaded": model_ready,
+            "stt_engine": engine,
             "language": _config.get("language", "fr") if _config else None,
         })
 
     @app.route("/transcribe", methods=["POST"])
     def transcribe_endpoint():
-        # Vérifier que le modèle est chargé
-        if _state is None or _state.model is None:
+        # Vérifier que le moteur STT est prêt
+        is_groq = _config and _config.get("stt_engine") == "groq"
+        if _state is None or (_state.model is None and not is_groq):
             return jsonify({"error": "Modèle pas encore chargé"}), 503
 
         # Vérifier la présence du fichier

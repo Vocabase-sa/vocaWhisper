@@ -7,7 +7,8 @@
 # La recherche est insensible à la casse.
 # Modifie ce fichier librement !
 #usual 
-
+impatient -> un patient
+iFraud -> iphone
 à la Rodon Bosch -> Alain rondenbosh 
 à la random box  -> Alain rondenbosh 
 Alain Ronan Bosch -> Alain rondenbosh 
@@ -30,9 +31,12 @@ Frédéric Jamin -> Frédéric Jamoulle
 Jamul -> Jamoulle
 Jamon -> Jamoulle
 Frédéric Jamboul -> Frédéric Jamoulle
+Frédéric Jamoll  -> Frédéric Jamoulle
+Frédéric Jamoullee  -> Frédéric Jamoulle
+Rochedi -> Rochdi 
+Rougy -> Rochdi 
 
-
-à la random box# --- VoIP ---
+# --- VoIP ---
 au cercle -> OCM
 open cypes -> OpenSIPs
 open SIPes -> OpenSIPs
@@ -46,6 +50,8 @@ astérisque -> Asterisk
 free switch -> FreeSWITCH
 camaïeu -> Kamailio
 camaillio -> Kamailio
+Cloud -> claude
+AeriHangup -> ari_hanghup
 
 # --- IoT ---
 noeud red -> Node-RED
@@ -54,6 +60,111 @@ Nordrad -> Node-RED
 moustiqueau -> Mosquitto
 mosquito -> Mosquitto
 Mais un jou -> Mais à jour
+
+Orthopedist -> Orthopédiste
+Anesthetist -> Anesthésiste
+Dentist -> Dentiste
+Nutritionist -> Nutritionniste
+Optometrist -> Optométriste
+Orthoptist -> Orthoptiste
+Biochemist -> Biochimiste
+Microbiologist -> Microbiologiste
+Virologist -> Virologiste
+Immunologist -> Immunologiste
+Toxicologist -> Toxicologiste
+Parasitologist -> Parasitologiste
+Epidemiologist -> Épidémiologiste
+Phlebotomist -> Phlébotomiste
+Cytologist -> Cytologiste
+Histologist -> Histologiste
+
+Gastroentérologie, ma mère -> Gastroentérologie, mammaire
+Urology -> Urologie
+Le service urologique -> Le service urologie
+neurology -> Neurologie
+Allergology -> Allergologie
+Andrology -> Andrologie
+Angiology -> Angiologie
+Anesthesiology -> Anesthésiologie
+Audiology -> Audiologie
+Bacteriology -> Bactériologie
+Biology -> Biologie
+Cardiology -> Cardiologie
+Cytology -> Cytologie
+Dermatology -> Dermatologie
+Diabetology -> Diabétologie
+Embryology -> Embryologie
+Endocrinology -> Endocrinologie
+Epidemiology -> Épidémiologie
+Gastroenterology -> Gastroentérologie
+Genetics -> Génétique
+Gerontology -> Gérontologie
+Geriatry -> Gériatrie
+Gynecology -> Gynécologie
+Hematology -> Hématologie
+Hepatology -> Hépatologie
+Histology -> Histologie
+Immunology -> Immunologie
+Infectiology -> Infectiologie
+Microbiology -> Microbiologie
+Mycology -> Mycologie
+Neonatology -> Néonatologie
+Nephrology -> Néphrologie
+Neurology -> Neurologie
+Oncology -> Oncologie
+Ophthalmology -> Ophtalmologie
+Osteology -> Ostéologie
+Otolaryngology -> Oto-rhino-laryngologie
+Parasitology -> Parasitologie
+Pathology -> Pathologie
+Pharmacology -> Pharmacologie
+Physiology -> Physiologie
+Pneumology -> Pneumologie
+Proctology -> Proctologie
+Psychology -> Psychologie
+Radiology -> Radiologie
+Rheumatology -> Rhumatologie
+Serology -> Sérologie
+Toxicology -> Toxicologie
+Traumatology -> Traumatologie
+Urology -> Urologie
+Virology -> Virologie
+Orthopedic -> Orthopédique
+Cardiologic -> Cardiologique
+Neurologic -> Neurologique
+Oncologic -> Oncologique
+Gynecologic -> Gynécologique
+Urologic -> Urologique
+Ophthalmologic -> Ophtalmologique
+Dermatologic -> Dermatologique
+Pneumologic -> Pneumologique
+Gastroenterologic -> Gastroentérologique
+Pediatric -> Pédiatrique
+Geriatric -> Gériatrique
+Psychiatric -> Psychiatrique
+Endocrinologic -> Endocrinologique
+Rheumatologic -> Rhumatologique
+Hematologic -> Hématologique
+Immunologic -> Immunologique
+Infectiologic -> Infectiologique
+Radiologic -> Radiologique
+Radiotherapeutic -> Radiothérapeutique
+Biologic -> Biologique
+Anesthetic -> Anesthésique
+Traumatologic -> Traumatologique
+Toxicologic -> Toxicologique
+Nephrologic -> Néphrologique
+Otologic -> Otologique
+Laryngologic -> Laryngologique
+Angiologic -> Angiologique
+Allergologic -> Allergologique
+Virologic -> Virologique
+Bacteriologic -> Bactériologique
+Parasitologic -> Parasitologique
+Genetic -> Génétique
+Diabetologic -> Diabétologique
+
+
 
 # --- Infra ---
 dockere -> Docker

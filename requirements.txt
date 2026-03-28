@@ -8,3 +8,4 @@ Pillow
 flask
 requests
 text2num
+groq

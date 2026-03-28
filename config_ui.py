@@ -46,6 +46,9 @@ DEFAULTS = {
     "auto_paste": True,
     "auto_start": False,
     "microphone": "",
+    "stt_engine": "local",
+    "groq_api_key": "",
+    "groq_model": "whisper-large-v3-turbo",
     "api_enabled": False,
     "api_host": "0.0.0.0",
     "api_port": 5000,
@@ -594,6 +597,43 @@ class ConfigWindow:
         mic_combo = ttk.Combobox(tab_general, textvariable=self.mic_var, state="readonly", width=40,
                                  values=mic_values)
         mic_combo.grid(row=row, column=1, columnspan=2, sticky="w", pady=6, padx=(10, 0))
+        row += 1
+
+        # --- Moteur STT ---
+        ttk.Separator(tab_general).grid(row=row, column=0, columnspan=3, sticky="ew", pady=(10, 6))
+        row += 1
+
+        ttk.Label(tab_general, text="Moteur STT :").grid(row=row, column=0, sticky="w", pady=6)
+        self.engine_var = tk.StringVar(value=self.cfg.get("stt_engine", "local"))
+        engine_combo = ttk.Combobox(
+            tab_general, textvariable=self.engine_var, state="readonly", width=18,
+            values=["local", "groq"],
+        )
+        engine_combo.grid(row=row, column=1, sticky="w", pady=6, padx=(10, 0))
+        ttk.Label(tab_general, text="*redémarrage requis", foreground="gray").grid(row=row, column=2, padx=(5, 0))
+        engine_combo.bind("<<ComboboxSelected>>", lambda e: self._toggle_groq_fields())
+        row += 1
+
+        # Clé API Groq
+        ttk.Label(tab_general, text="Clé API Groq :").grid(row=row, column=0, sticky="w", pady=4)
+        self.groq_key_var = tk.StringVar(value=self.cfg.get("groq_api_key", ""))
+        self.groq_key_entry = ttk.Entry(tab_general, textvariable=self.groq_key_var, width=40, show="*")
+        self.groq_key_entry.grid(row=row, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
+        row += 1
+
+        # Modèle Groq
+        ttk.Label(tab_general, text="Modèle Groq :").grid(row=row, column=0, sticky="w", pady=4)
+        self.groq_model_var = tk.StringVar(value=self.cfg.get("groq_model", "whisper-large-v3-turbo"))
+        self.groq_model_combo = ttk.Combobox(
+            tab_general, textvariable=self.groq_model_var, state="readonly", width=24,
+            values=["whisper-large-v3-turbo", "whisper-large-v3", "distil-whisper-large-v3-en"],
+        )
+        self.groq_model_combo.grid(row=row, column=1, sticky="w", pady=4, padx=(10, 0))
+        row += 1
+
+        self._toggle_groq_fields()
+
+        ttk.Separator(tab_general).grid(row=row, column=0, columnspan=3, sticky="ew", pady=(6, 10))
         row += 1
 
         # Auto-paste
@@ -1145,6 +1185,14 @@ class ConfigWindow:
                 fg="#dc3545",
             )
 
+    def _toggle_groq_fields(self):
+        """Active/désactive les champs Groq selon le moteur sélectionné."""
+        is_groq = self.engine_var.get() == "groq"
+        state = "normal" if is_groq else "disabled"
+        readonly = "readonly" if is_groq else "disabled"
+        self.groq_key_entry.config(state=state)
+        self.groq_model_combo.config(state=readonly)
+
     def _toggle_api_fields(self):
         """Active/désactive les champs API selon la checkbox."""
         enabled = self.api_enabled_var.get()
@@ -1246,6 +1294,7 @@ class ConfigWindow:
                 or self.device_var.get() != self.cfg["device"]
                 or self.compute_var.get() != self.cfg["compute_type"]
                 or (self.custom_model_var.get().strip() if self.use_finetuned_var.get() else "") != self.cfg.get("custom_model_path", "")
+                or self.engine_var.get() != self.cfg.get("stt_engine", "local")
                 or self.api_enabled_var.get() != self.cfg.get("api_enabled", False)
                 or self.api_host_var.get().strip() != self.cfg.get("api_host", "0.0.0.0")
                 or int(self.api_port_var.get()) != self.cfg.get("api_port", 5000)
@@ -1271,6 +1320,9 @@ class ConfigWindow:
                 "auto_paste": self.paste_var.get(),
                 "auto_start": auto_start,
                 "microphone": mic_value,
+                "stt_engine": self.engine_var.get(),
+                "groq_api_key": self.groq_key_var.get().strip(),
+                "groq_model": self.groq_model_var.get(),
                 "api_enabled": self.api_enabled_var.get(),
                 "api_host": self.api_host_var.get().strip(),
                 "api_port": int(self.api_port_var.get()),
@@ -1337,6 +1389,9 @@ class ConfigWindow:
                 "auto_paste": self.paste_var.get(),
                 "auto_start": auto_start,
                 "microphone": mic_value,
+                "stt_engine": self.engine_var.get(),
+                "groq_api_key": self.groq_key_var.get().strip(),
+                "groq_model": self.groq_model_var.get(),
                 "api_enabled": self.api_enabled_var.get(),
                 "api_host": self.api_host_var.get().strip(),
                 "api_port": int(self.api_port_var.get()),
