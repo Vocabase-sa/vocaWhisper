@@ -364,11 +364,7 @@ def load_model():
     Supporte un chemin personnalisé (modèle fine-tuné) via config["custom_model_path"].
     Si stt_engine="groq", aucun modèle local n'est chargé.
     """
-    if config.get("stt_engine") == "groq":
-        log("[Groq] Moteur cloud sélectionné — pas de modèle local à charger.")
-        state.model = None
-        return
-    # Utiliser le modèle personnalisé (fine-tuné) s'il est configuré
+    # Déterminer le modèle local à utiliser
     custom_path = config.get("custom_model_path", "").strip()
     if custom_path and os.path.isdir(custom_path):
         model = custom_path
@@ -378,6 +374,19 @@ def load_model():
         if custom_path:
             log(f"[WARN] Chemin modèle personnalisé introuvable : {custom_path}")
             log(f"       Fallback sur le modèle standard : {model}")
+
+    is_groq = config.get("stt_engine") == "groq"
+
+    # --- Mode Groq : charger le modèle local uniquement s'il est déjà en cache (fallback) ---
+    if is_groq:
+        has_local = os.path.isdir(model) or _is_model_cached(model)
+        if has_local:
+            log("[Groq] Moteur cloud sélectionné — chargement du modèle local en fallback...")
+        else:
+            log("[Groq] Moteur cloud sélectionné, pas de modèle local en cache — pas de fallback disponible.")
+            state.model = None
+            return
+
     device = config["device"]
     compute = config["compute_type"]
 
@@ -431,6 +440,9 @@ def load_model():
         # --- Toujours fermer la fenêtre de progression ---
         if progress_window:
             progress_window.close()
+
+    if is_groq:
+        log("[Groq] Modèle local chargé en fallback (sera utilisé si Groq échoue).")
 
 
 # =============================================================================
@@ -585,13 +597,26 @@ def _transcribe_groq(audio: np.ndarray) -> str:
 
 
 def transcribe(audio: np.ndarray) -> str:
-    """Transcrit l'audio avec le moteur configuré (local ou Groq)."""
+    """Transcrit l'audio avec le moteur configuré (local ou Groq).
+
+    Si Groq est sélectionné mais échoue (rate limit, erreur réseau, etc.),
+    bascule automatiquement sur le modèle local s'il est chargé.
+    """
     engine = config.get("stt_engine", "local")
     log(f"Transcription en cours ({engine})...")
     t0 = time.perf_counter()
 
     if engine == "groq":
-        text = _transcribe_groq(audio)
+        try:
+            text = _transcribe_groq(audio)
+        except Exception as e:
+            log(f"[Groq] ERREUR : {e}")
+            if state.model is not None:
+                log("[Groq → Local] Fallback sur le modèle local...")
+                text = _transcribe_local(audio)
+            else:
+                log("[Groq] Pas de modèle local disponible en fallback.")
+                raise
     else:
         text = _transcribe_local(audio)
 
