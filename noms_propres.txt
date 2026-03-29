@@ -1,0 +1,8 @@
+# Noms propres pour correction fuzzy
+# Un nom par ligne (noms simples ou composes)
+# Les lignes commencant par # sont ignorees
+#
+# Exemples :
+# Dachy
+# Abugattas de Torres
+# Lemaire

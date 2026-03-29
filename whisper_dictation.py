@@ -95,6 +95,8 @@ DEFAULTS = {
     "stt_engine": "local",
     "groq_api_key": "",
     "groq_model": "whisper-large-v3-turbo",
+    "fuzzy_enabled": True,
+    "fuzzy_threshold": 75,
     "api_enabled": False,
     "api_host": "0.0.0.0",
     "api_port": 5000,
@@ -626,6 +628,14 @@ def transcribe(audio: np.ndarray) -> str:
     if text:
         log(f">>> {text}")
         text = apply_corrections(text)
+        # Correction fuzzy des noms propres
+        if config.get("fuzzy_enabled", True):
+            from fuzzy_correction import apply_fuzzy_corrections
+            threshold = config.get("fuzzy_threshold", 75)
+            corrected = apply_fuzzy_corrections(text, threshold)
+            if corrected != text:
+                log(f"[FUZZY] '{text}' -> '{corrected}'")
+                text = corrected
     else:
         log("(aucun texte détecté)")
 

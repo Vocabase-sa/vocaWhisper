@@ -35,6 +35,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 VOCAB_FILE = os.path.join(BASE_DIR, "vocabulaire.txt")
 CORRECTIONS_FILE = os.path.join(BASE_DIR, "corrections.txt")
+NOMS_PROPRES_FILE = os.path.join(BASE_DIR, "noms_propres.txt")
 
 DEFAULTS = {
     "model_size": "large-v3",
@@ -49,6 +50,8 @@ DEFAULTS = {
     "stt_engine": "local",
     "groq_api_key": "",
     "groq_model": "whisper-large-v3-turbo",
+    "fuzzy_enabled": True,
+    "fuzzy_threshold": 75,
     "api_enabled": False,
     "api_host": "0.0.0.0",
     "api_port": 5000,
@@ -309,6 +312,20 @@ def save_corrections(text: str):
     with open(CORRECTIONS_FILE, "w", encoding="utf-8") as f:
         f.write(text)
     print(f"[config_ui] Corrections sauvegardées !", flush=True)
+
+
+def load_noms_propres() -> str:
+    if os.path.exists(NOMS_PROPRES_FILE):
+        with open(NOMS_PROPRES_FILE, "r", encoding="utf-8") as f:
+            return f.read()
+    return ""
+
+
+def save_noms_propres(text: str):
+    print(f"[config_ui] Sauvegarde noms propres dans : {NOMS_PROPRES_FILE}", flush=True)
+    with open(NOMS_PROPRES_FILE, "w", encoding="utf-8") as f:
+        f.write(text)
+    print(f"[config_ui] Noms propres sauvegardés !", flush=True)
 
 
 def _win32_set_taskbar_icon(root, ico_path):
@@ -754,7 +771,7 @@ class ConfigWindow:
 
         # --- Onglet Vocabulaire ---
         tab_vocab = ttk.Frame(notebook, padding=15)
-        notebook.add(tab_vocab, text="Vocabulaire")
+        notebook.add(tab_vocab, text="Prompt initial")
 
         ttk.Label(tab_vocab, text="Un mot ou expression par ligne (# = commentaire) :").pack(anchor="w")
 
@@ -798,6 +815,51 @@ class ConfigWindow:
         corr_scrollbar.config(command=self.corrections_text.yview)
 
         self.corrections_text.insert("1.0", load_corrections())
+
+        # --- Onglet Noms propres (fuzzy matching) ---
+        tab_noms = ttk.Frame(notebook, padding=15)
+        notebook.add(tab_noms, text="Noms propres")
+
+        # En-tete avec checkbox activation + seuil
+        noms_header = ttk.Frame(tab_noms)
+        noms_header.pack(fill="x", pady=(0, 5))
+
+        self.fuzzy_enabled_var = tk.BooleanVar(value=self.cfg.get("fuzzy_enabled", True))
+        ttk.Checkbutton(
+            noms_header, text="Activer la correction fuzzy",
+            variable=self.fuzzy_enabled_var,
+        ).pack(side="left")
+
+        ttk.Label(noms_header, text="Seuil :").pack(side="left", padx=(20, 4))
+        self.fuzzy_threshold_var = tk.IntVar(value=self.cfg.get("fuzzy_threshold", 75))
+        fuzzy_spin = ttk.Spinbox(
+            noms_header, from_=50, to=100, textvariable=self.fuzzy_threshold_var, width=4,
+        )
+        fuzzy_spin.pack(side="left")
+        ttk.Label(noms_header, text="/ 100", foreground="gray").pack(side="left", padx=(2, 0))
+
+        ttk.Label(tab_noms, text="Un nom propre par ligne (noms composes acceptes, # = commentaire) :").pack(anchor="w")
+
+        noms_frame = ttk.Frame(tab_noms)
+        noms_frame.pack(fill="both", expand=True, pady=(5, 0))
+
+        noms_scrollbar = ttk.Scrollbar(noms_frame)
+        noms_scrollbar.pack(side="right", fill="y")
+
+        self.noms_text = tk.Text(noms_frame, wrap="word", font=("Consolas", 10),
+                                 yscrollcommand=noms_scrollbar.set)
+        self.noms_text.pack(fill="both", expand=True)
+        noms_scrollbar.config(command=self.noms_text.yview)
+
+        self.noms_text.insert("1.0", load_noms_propres())
+
+        # Compteur de noms
+        self.noms_count_label = tk.Label(
+            tab_noms, text="", font=("Segoe UI", 9), anchor="w",
+        )
+        self.noms_count_label.pack(anchor="w", pady=(4, 0))
+        self._update_noms_count()
+        self.noms_text.bind("<<Modified>>", self._on_noms_modified)
 
         # --- Onglet Training (Fine-tuning) ---
         tab_training = ttk.Frame(notebook, padding=10)
@@ -1283,6 +1345,22 @@ class ConfigWindow:
                 fg="#666666",
             )
 
+    def _on_noms_modified(self, _=None):
+        """Appele quand le texte des noms propres change."""
+        if self.noms_text.edit_modified():
+            self._update_noms_count()
+            self.noms_text.edit_modified(False)
+
+    def _update_noms_count(self):
+        """Met a jour le compteur de noms propres."""
+        text = self.noms_text.get("1.0", "end-1c")
+        lines = [l.strip() for l in text.splitlines() if l.strip() and not l.strip().startswith("#")]
+        count = len(lines)
+        self.noms_count_label.config(
+            text=f"{count} nom(s) propre(s) enregistre(s)",
+            fg="#28a745" if count > 0 else "#666666",
+        )
+
     def _update_gain_label(self, _=None):
         self.gain_label.config(text=f"x{self.gain_var.get():.1f}")
 
@@ -1323,6 +1401,8 @@ class ConfigWindow:
                 "stt_engine": self.engine_var.get(),
                 "groq_api_key": self.groq_key_var.get().strip(),
                 "groq_model": self.groq_model_var.get(),
+                "fuzzy_enabled": self.fuzzy_enabled_var.get(),
+                "fuzzy_threshold": self.fuzzy_threshold_var.get(),
                 "api_enabled": self.api_enabled_var.get(),
                 "api_host": self.api_host_var.get().strip(),
                 "api_port": int(self.api_port_var.get()),
@@ -1351,6 +1431,10 @@ class ConfigWindow:
             # Sauvegarder corrections
             corr_content = self.corrections_text.get("1.0", "end-1c")
             save_corrections(corr_content)
+
+            # Sauvegarder noms propres
+            noms_content = self.noms_text.get("1.0", "end-1c")
+            save_noms_propres(noms_content)
 
             do_restart = False
             if needs_restart:
@@ -1392,6 +1476,8 @@ class ConfigWindow:
                 "stt_engine": self.engine_var.get(),
                 "groq_api_key": self.groq_key_var.get().strip(),
                 "groq_model": self.groq_model_var.get(),
+                "fuzzy_enabled": self.fuzzy_enabled_var.get(),
+                "fuzzy_threshold": self.fuzzy_threshold_var.get(),
                 "api_enabled": self.api_enabled_var.get(),
                 "api_host": self.api_host_var.get().strip(),
                 "api_port": int(self.api_port_var.get()),
@@ -1415,6 +1501,9 @@ class ConfigWindow:
 
             corr_content = self.corrections_text.get("1.0", "end-1c")
             save_corrections(corr_content)
+
+            noms_content = self.noms_text.get("1.0", "end-1c")
+            save_noms_propres(noms_content)
 
         except Exception as e:
             print(f"[config_ui] ERREUR sauvegarde : {e}", flush=True)
