@@ -1,19 +1,21 @@
 # VocaWhisper
 
-Dictez du texte par la voix avec un raccourci clavier global (**Ctrl+Space**), le texte transcrit est automatiquement copie dans le presse-papier et colle dans l'application active.
+Dictez du texte par la voix avec un raccourci clavier global configurable, le texte transcrit est automatiquement copie dans le presse-papier et colle dans l'application active.
 
-Utilise [faster-whisper](https://github.com/SYSTRAN/faster-whisper) avec acceleration GPU (CUDA / Apple MPS) ou CPU.
+Supporte deux moteurs de transcription : [faster-whisper](https://github.com/SYSTRAN/faster-whisper) en local (GPU CUDA / Apple MPS / CPU) ou [Groq](https://groq.com/) dans le cloud pour une transcription ultra-rapide.
 
 ---
 
 ## Fonctionnalites
 
-- **Raccourci global Ctrl+Space** : demarrer/arreter l'enregistrement depuis n'importe quelle application
-- **Transcription locale** : tout reste sur votre machine, aucune donnee envoyee dans le cloud
+- **Raccourcis configurables** : 2 raccourcis clavier au choix (Ctrl+Space, Ctrl+², Ctrl+F1-F5, Ctrl+Shift+D/A/Space) configurables depuis l'UI
+- **Double moteur STT** : transcription locale (faster-whisper) ou cloud (Groq), avec fallback automatique optionnel
 - **Collage automatique** : le texte transcrit est colle directement dans l'application active
-- **Vocabulaire personnalise** : ajoutez des mots techniques pour ameliorer la reconnaissance
+- **Prompt initial** : ajoutez des mots techniques pour orienter la reconnaissance vocale
 - **Corrections automatiques** : regles de post-traitement pour corriger les erreurs recurrentes
+- **Correction fuzzy des noms propres** : corrige automatiquement les noms propres mal transcrits via [rapidfuzz](https://github.com/rapidfuzz/RapidFuzz), avec seuil configurable
 - **Fine-tuning Whisper** : entrainez le modele sur vos propres donnees audio pour ameliorer la reconnaissance de votre vocabulaire
+- **API HTTP** : endpoint `/transcribe` pour integrer la dictee dans d'autres applications (Flask)
 - **Icone system tray** : acces rapide aux parametres et controle de l'application
 - **Overlay futuriste** : pilule flottante avec indicateur REC, timer et barres audio animees en temps reel
 - **Choix du microphone** : selection du peripherique audio dans les parametres
@@ -176,6 +178,17 @@ Ou utilisez les parametres via l'icone system tray (clic droit > Parametres).
 | `auto_paste` | Coller automatiquement | `true` / `false` |
 | `auto_start` | Demarrage avec le systeme | `true` / `false` |
 | `microphone` | Nom du micro | `""` (defaut systeme) ou nom du peripherique |
+| `hotkey_primary` | Raccourci principal | `Ctrl+Space`, `Ctrl+²`, `Ctrl+F1`-`F5`, etc. |
+| `hotkey_secondary` | Raccourci secondaire | Memes valeurs ou `Aucun` |
+| `stt_engine` | Moteur de transcription | `local` (faster-whisper) ou `groq` (cloud) |
+| `groq_api_key` | Cle API Groq | Cle obtenue sur [console.groq.com](https://console.groq.com) |
+| `groq_model` | Modele Groq | `whisper-large-v3`, `whisper-large-v3-turbo` |
+| `groq_fallback_local` | Fallback sur le modele local | `true` / `false` — si Groq echoue, utilise le modele local |
+| `fuzzy_enabled` | Correction fuzzy des noms propres | `true` / `false` |
+| `fuzzy_threshold` | Seuil de similarite fuzzy | `0`-`100` (defaut: `60`) |
+| `api_enabled` | Activer l'API HTTP | `true` / `false` |
+| `api_host` | Adresse d'ecoute API | `0.0.0.0` (toutes interfaces) ou `127.0.0.1` (local) |
+| `api_port` | Port de l'API HTTP | defaut: `5892` |
 
 ### Modeles recommandes
 
@@ -196,18 +209,24 @@ Ou utilisez les parametres via l'icone system tray (clic droit > Parametres).
 
 ### Cycle de dictee
 
-1. **Lancement** : l'application charge le modele Whisper en memoire (GPU ou CPU) et affiche une icone verte dans le system tray
-2. **Ctrl+Space (1er appui)** : l'enregistrement audio demarre, un overlay futuriste s'affiche (pilule avec indicateur REC, timer et barres audio en temps reel)
-3. **Ctrl+Space (2e appui)** : l'enregistrement s'arrete, l'audio est amplifie selon le gain configure
-4. **Transcription** : faster-whisper transcrit l'audio en texte, en utilisant le vocabulaire personnalise comme contexte
+1. **Lancement** : l'application charge le moteur STT (local ou Groq) et affiche une icone verte dans le system tray
+2. **Raccourci (1er appui)** : l'enregistrement audio demarre, un overlay futuriste s'affiche (pilule avec indicateur REC, timer et barres audio en temps reel)
+3. **Raccourci (2e appui)** : l'enregistrement s'arrete, l'audio est amplifie selon le gain configure
+4. **Transcription** : le moteur STT (local ou Groq) transcrit l'audio en texte, en utilisant le prompt initial comme contexte
 5. **Corrections** : les regles de `corrections.txt` sont appliquees au texte transcrit
-6. **Resultat** : le texte final est copie dans le presse-papier et automatiquement colle (Ctrl+V) dans l'application active
+6. **Fuzzy noms propres** : les noms propres mal transcrits sont corriges par similarite via `noms_propres.txt`
+7. **Resultat** : le texte final est copie dans le presse-papier et automatiquement colle (Ctrl+V) dans l'application active
 
 ### Raccourcis
 
-| Raccourci | Action |
-|-----------|--------|
-| `Ctrl+Space` | Demarrer/arreter l'enregistrement |
+Les raccourcis sont configurables depuis l'onglet General des parametres. Deux raccourcis disponibles (principal + secondaire).
+
+| Raccourci (defaut) | Action |
+|---------------------|--------|
+| `Ctrl+Space` | Demarrer/arreter l'enregistrement (raccourci principal) |
+| `Ctrl+F2` | Demarrer/arreter l'enregistrement (raccourci secondaire) |
+
+Raccourcis disponibles : `Ctrl+Space`, `Ctrl+²`, `Ctrl+F1` a `Ctrl+F5`, `Ctrl+Shift+D`, `Ctrl+Shift+A`, `Ctrl+Shift+Space`, ou `Aucun`.
 
 > Pour quitter l'application, utilisez le clic droit sur l'icone system tray > **Quitter**.
 
@@ -215,7 +234,7 @@ Ou utilisez les parametres via l'icone system tray (clic droit > Parametres).
 
 Un clic droit sur l'icone dans la barre des taches donne acces a :
 
-- **Parametres** : ouvre la fenetre de configuration (onglets General, Vocabulaire, Corrections, Training)
+- **Parametres** : ouvre la fenetre de configuration (onglets General, Prompt initial, Corrections, Noms propres, Training)
 - **Quitter** : ferme l'application
 
 L'icone change de couleur : **verte** = pret, **rouge** = enregistrement en cours.
@@ -246,7 +265,7 @@ Pendant l'enregistrement, une pilule futuriste flottante s'affiche en bas de l'e
 
 ## Parametres (interface graphique)
 
-Accessible via clic droit sur l'icone tray > **Parametres**. La fenetre comporte 3 onglets :
+Accessible via clic droit sur l'icone tray > **Parametres**. La fenetre comporte 5 onglets :
 
 ### Onglet General
 
@@ -260,12 +279,25 @@ Accessible via clic droit sur l'icone tray > **Parametres**. La fenetre comporte
 | **Microphone** | Peripherique d'entree audio | Liste les micros detectes. "(defaut systeme)" utilise le micro par defaut de l'OS. |
 | **Coller automatiquement** | Coller le texte apres transcription | Si active, simule Ctrl+V apres la copie dans le presse-papier |
 | **Demarrage automatique** | Lancer avec le systeme | Windows : cree un raccourci dans le dossier Startup. macOS : cree un LaunchAgent. |
+| **Raccourci 1 / 2** | Raccourcis clavier configurables | Choisissez parmi la liste (Ctrl+Space, Ctrl+², Ctrl+F1-F5, etc.). Un changement necessite un redemarrage. |
+| **Moteur STT** | Moteur de transcription | `local` (faster-whisper) ou `groq` (cloud). Voir section Groq ci-dessous. |
 
 L'onglet General affiche aussi :
 - Un indicateur en temps reel pour chaque modele : **en local** (avec la taille) ou **a telecharger** (avec la taille estimee)
 - Un **avertissement** si un modele anglais uniquement est selectionne avec une autre langue
 
-### Onglet Vocabulaire
+#### Configuration Groq (cloud)
+
+Quand le moteur STT est regle sur `groq` :
+- **Cle API Groq** : votre cle API (obtenue sur [console.groq.com](https://console.groq.com))
+- **Modele Groq** : `whisper-large-v3` (meilleure qualite) ou `whisper-large-v3-turbo` (plus rapide)
+- **Fallback local** : si active, utilise le modele local en cas d'echec de Groq (erreur reseau, quota, etc.)
+
+> **Avantage Groq** : demarrage quasi-instantane (pas de chargement de modele GPU), transcription tres rapide. Necessite une connexion internet.
+
+> **Fallback** : si le fallback est desactive, le modele local n'est pas charge en memoire, ce qui reduit drastiquement le temps de demarrage et la consommation VRAM.
+
+### Onglet Prompt initial
 
 Zone de texte libre pour ajouter des mots ou expressions que Whisper a du mal a reconnaitre. Un mot ou expression par ligne, les lignes commencant par `#` sont ignorees.
 
@@ -304,7 +336,32 @@ cubernétise -> Kubernetes
 gite -> Git
 ```
 
-> **Astuce** : dictez vos termes techniques plusieurs fois, notez les erreurs recurrentes de Whisper, puis ajoutez les corrections correspondantes. Combinez avec le vocabulaire pour un maximum de precision.
+> **Astuce** : dictez vos termes techniques plusieurs fois, notez les erreurs recurrentes de Whisper, puis ajoutez les corrections correspondantes. Combinez avec le prompt initial pour un maximum de precision.
+
+### Onglet Noms propres
+
+Gere la correction automatique des noms propres par similarite (fuzzy matching via [rapidfuzz](https://github.com/rapidfuzz/RapidFuzz)).
+
+| Parametre | Description |
+|-----------|-------------|
+| **Activer la correction fuzzy** | Active/desactive la correction automatique des noms propres |
+| **Seuil de similarite** | Score minimum (0-100) pour accepter une correction. Defaut : 60. Plus bas = plus tolerant, plus de risques de faux positifs. |
+| **Liste de noms** | Un nom propre par ligne (noms simples ou composes). Les lignes `#` sont ignorees. |
+
+**Comment ca marche** : apres la transcription et les corrections regex, chaque mot du texte est compare aux noms de la liste. Si la similarite depasse le seuil, le mot est remplace. Les noms composes (ex: "Abugattas de Torres") sont traites en priorite.
+
+Exemple (`noms_propres.txt`) :
+```
+# Medecins
+Jamoulle
+Rochdi
+Abugattas de Torres
+
+# Lieux
+rondenbosh
+```
+
+> **Astuce** : si Groq ou Whisper transcrit systematiquement un nom propre de facon incorrecte mais proche (ex: "Rondenboche" au lieu de "rondenbosh"), ajoutez le nom correct ici. Le fuzzy matching corrigera automatiquement les variantes.
 
 ### Onglet Training (Fine-tuning)
 
@@ -415,11 +472,16 @@ python fine_tuning/convert_to_ct2.py --quantization float16
 vocaWhisper/
 ├── whisper_dictation.py   # Application principale
 ├── config_ui.py           # Interface de parametres (tkinter)
+├── fuzzy_correction.py    # Correction fuzzy des noms propres (rapidfuzz)
 ├── overlay_ui.py          # Overlay futuriste d'enregistrement
 ├── download_ui.py         # Fenetre de progression du telechargement
+├── api/                   # API HTTP (Flask)
+│   ├── server.py          # Serveur Flask (/transcribe, /health)
+│   └── __init__.py
 ├── config.json.example    # Exemple de configuration
-├── vocabulaire.txt        # Mots personnalises pour Whisper
+├── vocabulaire.txt        # Prompt initial pour Whisper
 ├── corrections.txt        # Regles de correction post-transcription
+├── noms_propres.txt       # Noms propres pour correction fuzzy
 ├── requirements.txt       # Dependances Python
 ├── fine_tuning/           # Pipeline de fine-tuning Whisper
 │   ├── prepare_dataset.py # Preparation du dataset audio
@@ -433,6 +495,25 @@ vocaWhisper/
 ├── run.bat                # Lanceur Windows (avec console)
 ├── run_silent.vbs         # Lanceur Windows (sans fenetre)
 └── .gitignore
+```
+
+---
+
+## API HTTP
+
+VocaWhisper expose une API REST (Flask) pour integrer la transcription dans d'autres applications.
+
+| Endpoint | Methode | Description |
+|----------|---------|-------------|
+| `/transcribe` | POST | Envoie un fichier audio et recoit la transcription |
+| `/health` | GET | Etat du serveur (moteur STT, pret ou non) |
+
+Activable dans les parametres (onglet General > API). Par defaut sur le port `5892`.
+
+Exemple :
+```bash
+curl -X POST http://localhost:5892/transcribe \
+  -F "audio=@mon_fichier.wav"
 ```
 
 ---
@@ -453,12 +534,15 @@ Tous les logs sont centralises dans le dossier `logs/` :
 |----------|----------|
 | `CUDA not available` | Verifiez que les drivers NVIDIA et CUDA toolkit sont installes |
 | Micro non detecte | Verifiez les permissions micro dans les parametres systeme |
-| Transcription lente | Passez a un modele plus petit (`small`, `medium`) ou verifiez que le GPU est actif |
+| Transcription lente | Passez a un modele plus petit (`small`, `medium`), verifiez que le GPU est actif, ou passez sur Groq (cloud) |
 | Texte non colle | Verifiez que `auto_paste` est active et que l'application cible accepte Ctrl+V |
 | Parametres ne s'ouvrent pas | Verifiez les logs ; l'interface se lance dans un processus separe |
 | Modele distil ne transcrit pas le francais | Les modeles `distil` ne supportent que l'anglais. Utilisez `large-v3` ou `large-v3-turbo` |
 | Modele affiche "a telecharger" alors qu'il est present | Le nom du cache peut varier selon l'org. Mettez a jour vers la derniere version |
 | L'app se ferme toute seule | Verifiez les logs (`logs/whisper_dictation.log`) pour identifier la cause |
+| Raccourci ne fonctionne pas | Verifiez le raccourci configure dans les parametres. Les touches F1-F5 sont les plus fiables. Ctrl+² necessite un clavier AZERTY. |
+| Groq echoue | Verifiez votre cle API et votre connexion internet. Activez le fallback local si necessaire. |
+| Noms propres mal corriges | Ajustez le seuil fuzzy (plus bas = plus tolerant). Verifiez que le nom est bien dans `noms_propres.txt`. |
 
 ---
 
