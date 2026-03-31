@@ -1,10 +1,12 @@
 faster-whisper
 sounddevice
 numpy
-keyboard
 pyperclip
 pystray
 Pillow
+pynput
+huggingface_hub
+tokenizers
 flask
 requests
 text2num

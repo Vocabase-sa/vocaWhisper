@@ -9,32 +9,7 @@
 #usual 
 impatient -> un patient
 iFraud -> iphone
-à la Rodon Bosch -> Alain rondenbosh 
-à la random box  -> Alain rondenbosh 
-Alain Ronan Bosch -> Alain rondenbosh 
-Germont -> Jamoulle 
-Frédéric Germont -> Frédéric Jamoulle 
-Frédéric Diamoune -> Frédéric Jamoulle
-Frédéric Gijamoula -> Frédéric Jamoulle
-Frédéric Dijamoul -> Frédéric Jamoulle
-Frédéric Jamoul -> Frédéric Jamoulle
-Frédéric Genoux -> Frédéric Jamoulle
-Frédéric Jamul  -> Frédéric Jamoulle
-Frédéric Germain -> Frédéric Jamoulle
-Frédéric Giroud -> Frédéric Jamoulle
-Frédéric Jamon -> Frédéric Jamoulle
-Frédéric Jamoulleon -> Frédéric Jamoulle
-Prevalidia Moon-> Frédéric Jamoulle
-Frédéric Jamoud -> Frédéric Jamoulle
-Frédéric Djamoun -> Frédéric Jamoulle
-Frédéric Jamin -> Frédéric Jamoulle
-Jamul -> Jamoulle
-Jamon -> Jamoulle
-Frédéric Jamboul -> Frédéric Jamoulle
-Frédéric Jamoll  -> Frédéric Jamoulle
-Frédéric Jamoullee  -> Frédéric Jamoulle
-Rochedi -> Rochdi 
-Rougy -> Rochdi 
+
 
 # --- VoIP ---
 au cercle -> OCM

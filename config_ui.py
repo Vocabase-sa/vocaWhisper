@@ -47,11 +47,14 @@ DEFAULTS = {
     "auto_paste": True,
     "auto_start": False,
     "microphone": "",
+    "hotkey_primary": "Ctrl+Space",
+    "hotkey_secondary": "Ctrl+F2",
     "stt_engine": "local",
     "groq_api_key": "",
     "groq_model": "whisper-large-v3-turbo",
+    "groq_fallback_local": False,
     "fuzzy_enabled": True,
-    "fuzzy_threshold": 75,
+    "fuzzy_threshold": 60,
     "api_enabled": False,
     "api_host": "0.0.0.0",
     "api_port": 5000,
@@ -443,9 +446,9 @@ class ConfigWindow:
 
         self.root = tk.Tk()
         self.root.title("Whisper Dictation - Paramètres")
-        self.root.geometry("600x650")
+        self.root.geometry("700x750")
         self.root.resizable(True, True)
-        self.root.minsize(600, 600)
+        self.root.minsize(700, 700)
 
         # Icône de la fenêtre (Vocabase)
         self._set_window_icon()
@@ -616,6 +619,29 @@ class ConfigWindow:
         mic_combo.grid(row=row, column=1, columnspan=2, sticky="w", pady=6, padx=(10, 0))
         row += 1
 
+        # --- Raccourcis clavier ---
+        hotkey_values = [
+            "Ctrl+Space", "Ctrl+²", "Ctrl+F1", "Ctrl+F2", "Ctrl+F3",
+            "Ctrl+F4", "Ctrl+F5", "Ctrl+Shift+D",
+            "Ctrl+Shift+A", "Ctrl+Shift+Space",
+        ]
+
+        ttk.Label(tab_general, text="Raccourci 1 :").grid(row=row, column=0, sticky="w", pady=4)
+        self.hotkey1_var = tk.StringVar(value=self.cfg.get("hotkey_primary", "Ctrl+Space"))
+        hk1_combo = ttk.Combobox(tab_general, textvariable=self.hotkey1_var, state="readonly", width=18,
+                                 values=hotkey_values)
+        hk1_combo.grid(row=row, column=1, sticky="w", pady=4, padx=(10, 0))
+        ttk.Label(tab_general, text="*redémarrage requis", foreground="gray").grid(row=row, column=2, padx=(5, 0))
+        row += 1
+
+        ttk.Label(tab_general, text="Raccourci 2 :").grid(row=row, column=0, sticky="w", pady=4)
+        self.hotkey2_var = tk.StringVar(value=self.cfg.get("hotkey_secondary", "Ctrl+Shift+D"))
+        hk2_combo = ttk.Combobox(tab_general, textvariable=self.hotkey2_var, state="readonly", width=18,
+                                 values=hotkey_values + ["Aucun"])
+        hk2_combo.grid(row=row, column=1, sticky="w", pady=4, padx=(10, 0))
+        ttk.Label(tab_general, text="*redémarrage requis", foreground="gray").grid(row=row, column=2, padx=(5, 0))
+        row += 1
+
         # --- Moteur STT ---
         ttk.Separator(tab_general).grid(row=row, column=0, columnspan=3, sticky="ew", pady=(10, 6))
         row += 1
@@ -648,6 +674,15 @@ class ConfigWindow:
         self.groq_model_combo.grid(row=row, column=1, sticky="w", pady=4, padx=(10, 0))
         row += 1
 
+        # Fallback local
+        self.groq_fallback_var = tk.BooleanVar(value=self.cfg.get("groq_fallback_local", False))
+        self.groq_fallback_check = ttk.Checkbutton(
+            tab_general, text="Charger le modèle local en fallback (démarrage plus lent)",
+            variable=self.groq_fallback_var,
+        )
+        self.groq_fallback_check.grid(row=row, column=0, columnspan=3, sticky="w", pady=(2, 4))
+        row += 1
+
         self._toggle_groq_fields()
 
         ttk.Separator(tab_general).grid(row=row, column=0, columnspan=3, sticky="ew", pady=(6, 10))
@@ -671,7 +706,7 @@ class ConfigWindow:
                         variable=self.autostart_var).grid(row=row, column=0, columnspan=3, sticky="w", pady=6)
         row += 1
 
-        # --- Onglet Réseau (API + RTP) ---
+        # --- Onglet Réseau (API HTTP) ---
         tab_network = ttk.Frame(notebook, padding=15)
         notebook.add(tab_network, text="Réseau")
 
@@ -704,72 +739,7 @@ class ConfigWindow:
 
         self._toggle_api_fields()
 
-        # === Section RTP Streaming ===
-        ttk.Separator(tab_network).grid(row=nrow, column=0, columnspan=3, sticky="ew", pady=(14, 8))
-        nrow += 1
-
-        ttk.Label(tab_network, text="Streaming RTP (téléphonie)", font=("Segoe UI", 10, "bold")).grid(
-            row=nrow, column=0, columnspan=3, sticky="w", pady=(0, 4))
-        nrow += 1
-
-        self.rtp_enabled_var = tk.BooleanVar(value=self.cfg.get("rtp_enabled", False))
-        ttk.Checkbutton(
-            tab_network, text="Activer le streaming RTP",
-            variable=self.rtp_enabled_var, command=self._toggle_rtp_fields,
-        ).grid(row=nrow, column=0, columnspan=2, sticky="w", pady=6)
-        ttk.Label(tab_network, text="*redémarrage requis", foreground="gray").grid(row=nrow, column=2, padx=(5, 0))
-        nrow += 1
-
-        ttk.Label(tab_network, text="Port UDP :").grid(row=nrow, column=0, sticky="w", pady=4)
-        self.rtp_port_var = tk.StringVar(value=str(self.cfg.get("rtp_port", 5002)))
-        self.rtp_port_entry = ttk.Entry(tab_network, textvariable=self.rtp_port_var, width=8)
-        self.rtp_port_entry.grid(row=nrow, column=1, sticky="w", pady=4, padx=(10, 0))
-        nrow += 1
-
-        ttk.Label(tab_network, text="Pool Whisper :").grid(row=nrow, column=0, sticky="w", pady=4)
-        pool_frame = ttk.Frame(tab_network)
-        pool_frame.grid(row=nrow, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
-        self.rtp_pool_var = tk.IntVar(value=self.cfg.get("rtp_pool_size", 2))
-        self.rtp_pool_spin = ttk.Spinbox(
-            pool_frame, from_=1, to=5, textvariable=self.rtp_pool_var, width=4,
-        )
-        self.rtp_pool_spin.pack(side="left")
-        self.rtp_pool_hint = ttk.Label(pool_frame, text="modèle(s)  (~3 GB VRAM chacun)", foreground="gray")
-        self.rtp_pool_hint.pack(side="left", padx=(6, 0))
-        nrow += 1
-
-        ttk.Label(tab_network, text="Langue RTP :").grid(row=nrow, column=0, sticky="w", pady=4)
-        self.rtp_lang_var = tk.StringVar(value=self.cfg.get("rtp_language", "fr"))
-        self.rtp_lang_combo = ttk.Combobox(
-            tab_network, textvariable=self.rtp_lang_var, width=6, state="readonly",
-            values=["fr", "en", "de", "es", "it", "nl", "pt", "auto"],
-        )
-        self.rtp_lang_combo.grid(row=nrow, column=1, sticky="w", pady=4, padx=(10, 0))
-        nrow += 1
-
-        ttk.Label(tab_network, text="Webhook URL :").grid(row=nrow, column=0, sticky="w", pady=4)
-        self.rtp_webhook_var = tk.StringVar(value=self.cfg.get("rtp_webhook_url", ""))
-        self.rtp_webhook_entry = ttk.Entry(tab_network, textvariable=self.rtp_webhook_var, width=40)
-        self.rtp_webhook_entry.grid(row=nrow, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
-        nrow += 1
-
-        self.rtp_record_var = tk.BooleanVar(value=self.cfg.get("rtp_record_wav", False))
-        self.rtp_record_check = ttk.Checkbutton(
-            tab_network, text="Enregistrer les fichiers WAV",
-            variable=self.rtp_record_var, command=self._toggle_rtp_save_dir,
-        )
-        self.rtp_record_check.grid(row=nrow, column=0, columnspan=2, sticky="w", pady=4)
-        nrow += 1
-
-        ttk.Label(tab_network, text="Dossier :").grid(row=nrow, column=0, sticky="w", pady=4)
-        self.rtp_save_dir_var = tk.StringVar(value=self.cfg.get("rtp_save_dir", "./recordings"))
-        self.rtp_save_dir_entry = ttk.Entry(tab_network, textvariable=self.rtp_save_dir_var, width=30)
-        self.rtp_save_dir_entry.grid(row=nrow, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
-        nrow += 1
-
-        self._toggle_rtp_fields()
-
-        # --- Onglet Vocabulaire ---
+        # --- Onglet Prompt initial ---
         tab_vocab = ttk.Frame(notebook, padding=15)
         notebook.add(tab_vocab, text="Prompt initial")
 
@@ -831,7 +801,7 @@ class ConfigWindow:
         ).pack(side="left")
 
         ttk.Label(noms_header, text="Seuil :").pack(side="left", padx=(20, 4))
-        self.fuzzy_threshold_var = tk.IntVar(value=self.cfg.get("fuzzy_threshold", 75))
+        self.fuzzy_threshold_var = tk.IntVar(value=self.cfg.get("fuzzy_threshold", 60))
         fuzzy_spin = ttk.Spinbox(
             noms_header, from_=50, to=100, textvariable=self.fuzzy_threshold_var, width=4,
         )
@@ -1254,6 +1224,7 @@ class ConfigWindow:
         readonly = "readonly" if is_groq else "disabled"
         self.groq_key_entry.config(state=state)
         self.groq_model_combo.config(state=readonly)
+        self.groq_fallback_check.config(state=state)
 
     def _toggle_api_fields(self):
         """Active/désactive les champs API selon la checkbox."""
@@ -1261,24 +1232,6 @@ class ConfigWindow:
         state = "normal" if enabled else "disabled"
         self.api_host_entry.config(state=state)
         self.api_port_entry.config(state=state)
-
-    def _toggle_rtp_fields(self):
-        """Active/désactive les champs RTP selon la checkbox."""
-        enabled = self.rtp_enabled_var.get()
-        state = "normal" if enabled else "disabled"
-        readonly = "readonly" if enabled else "disabled"
-        self.rtp_port_entry.config(state=state)
-        self.rtp_pool_spin.config(state=state)
-        self.rtp_lang_combo.config(state=readonly)
-        self.rtp_webhook_entry.config(state=state)
-        self.rtp_record_check.config(state=state)
-        self._toggle_rtp_save_dir()
-
-    def _toggle_rtp_save_dir(self):
-        """Active/désactive le champ dossier WAV selon les checkboxes RTP."""
-        enabled = self.rtp_enabled_var.get() and self.rtp_record_var.get()
-        state = "normal" if enabled else "disabled"
-        self.rtp_save_dir_entry.config(state=state)
 
     def _update_model_status(self):
         """Met à jour le label indiquant si le modèle est en local ou à télécharger."""
@@ -1372,13 +1325,13 @@ class ConfigWindow:
                 or self.device_var.get() != self.cfg["device"]
                 or self.compute_var.get() != self.cfg["compute_type"]
                 or (self.custom_model_var.get().strip() if self.use_finetuned_var.get() else "") != self.cfg.get("custom_model_path", "")
+                or self.hotkey1_var.get() != self.cfg.get("hotkey_primary", "Ctrl+Space")
+                or self.hotkey2_var.get() != self.cfg.get("hotkey_secondary", "Ctrl+Shift+D")
                 or self.engine_var.get() != self.cfg.get("stt_engine", "local")
+                or self.groq_fallback_var.get() != self.cfg.get("groq_fallback_local", False)
                 or self.api_enabled_var.get() != self.cfg.get("api_enabled", False)
                 or self.api_host_var.get().strip() != self.cfg.get("api_host", "0.0.0.0")
                 or int(self.api_port_var.get()) != self.cfg.get("api_port", 5000)
-                or self.rtp_enabled_var.get() != self.cfg.get("rtp_enabled", False)
-                or int(self.rtp_port_var.get()) != self.cfg.get("rtp_port", 5002)
-                or self.rtp_pool_var.get() != self.cfg.get("rtp_pool_size", 2)
             )
 
             # Sauvegarder config
@@ -1398,21 +1351,17 @@ class ConfigWindow:
                 "auto_paste": self.paste_var.get(),
                 "auto_start": auto_start,
                 "microphone": mic_value,
+                "hotkey_primary": self.hotkey1_var.get(),
+                "hotkey_secondary": self.hotkey2_var.get(),
                 "stt_engine": self.engine_var.get(),
                 "groq_api_key": self.groq_key_var.get().strip(),
                 "groq_model": self.groq_model_var.get(),
+                "groq_fallback_local": self.groq_fallback_var.get(),
                 "fuzzy_enabled": self.fuzzy_enabled_var.get(),
                 "fuzzy_threshold": self.fuzzy_threshold_var.get(),
                 "api_enabled": self.api_enabled_var.get(),
                 "api_host": self.api_host_var.get().strip(),
                 "api_port": int(self.api_port_var.get()),
-                "rtp_enabled": self.rtp_enabled_var.get(),
-                "rtp_port": int(self.rtp_port_var.get()),
-                "rtp_pool_size": self.rtp_pool_var.get(),
-                "rtp_webhook_url": self.rtp_webhook_var.get().strip(),
-                "rtp_record_wav": self.rtp_record_var.get(),
-                "rtp_save_dir": self.rtp_save_dir_var.get().strip(),
-                "rtp_language": self.rtp_lang_var.get(),
             }
             save_config(new_cfg)
 
@@ -1473,21 +1422,17 @@ class ConfigWindow:
                 "auto_paste": self.paste_var.get(),
                 "auto_start": auto_start,
                 "microphone": mic_value,
+                "hotkey_primary": self.hotkey1_var.get(),
+                "hotkey_secondary": self.hotkey2_var.get(),
                 "stt_engine": self.engine_var.get(),
                 "groq_api_key": self.groq_key_var.get().strip(),
                 "groq_model": self.groq_model_var.get(),
+                "groq_fallback_local": self.groq_fallback_var.get(),
                 "fuzzy_enabled": self.fuzzy_enabled_var.get(),
                 "fuzzy_threshold": self.fuzzy_threshold_var.get(),
                 "api_enabled": self.api_enabled_var.get(),
                 "api_host": self.api_host_var.get().strip(),
                 "api_port": int(self.api_port_var.get()),
-                "rtp_enabled": self.rtp_enabled_var.get(),
-                "rtp_port": int(self.rtp_port_var.get()),
-                "rtp_pool_size": self.rtp_pool_var.get(),
-                "rtp_webhook_url": self.rtp_webhook_var.get().strip(),
-                "rtp_record_wav": self.rtp_record_var.get(),
-                "rtp_save_dir": self.rtp_save_dir_var.get().strip(),
-                "rtp_language": self.rtp_lang_var.get(),
             }
             save_config(new_cfg)
 

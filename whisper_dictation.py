@@ -92,11 +92,14 @@ DEFAULTS = {
     "auto_paste": True,
     "auto_start": False,
     "microphone": "",
+    "hotkey_primary": "Ctrl+Space",
+    "hotkey_secondary": "Ctrl+F2",
     "stt_engine": "local",
     "groq_api_key": "",
     "groq_model": "whisper-large-v3-turbo",
+    "groq_fallback_local": False,
     "fuzzy_enabled": True,
-    "fuzzy_threshold": 75,
+    "fuzzy_threshold": 60,
     "api_enabled": False,
     "api_host": "0.0.0.0",
     "api_port": 5000,
@@ -188,6 +191,7 @@ class AppState:
         self.running = True
         self.restart_requested = False
         self.ctrl_pressed = False
+        self.shift_pressed = False
         self.audio_levels: collections.deque = collections.deque(maxlen=50)
         self.overlay = None
         self.settings_open = False
@@ -364,7 +368,7 @@ def load_model():
     long est nécessaire, pour que l'utilisateur sache que l'app travaille.
 
     Supporte un chemin personnalisé (modèle fine-tuné) via config["custom_model_path"].
-    Si stt_engine="groq", aucun modèle local n'est chargé.
+    Si stt_engine="groq" sans fallback local, aucun modèle n'est chargé.
     """
     # Déterminer le modèle local à utiliser
     custom_path = config.get("custom_model_path", "").strip()
@@ -377,15 +381,17 @@ def load_model():
             log(f"[WARN] Chemin modèle personnalisé introuvable : {custom_path}")
             log(f"       Fallback sur le modèle standard : {model}")
 
-    is_groq = config.get("stt_engine") == "groq"
+    if config.get("stt_engine") == "groq" and not config.get("groq_fallback_local", False):
+        log("[Groq] Moteur cloud sélectionné — pas de modèle local à charger.")
+        state.model = None
+        return
 
-    # --- Mode Groq : charger le modèle local uniquement s'il est déjà en cache (fallback) ---
-    if is_groq:
+    if config.get("stt_engine") == "groq" and config.get("groq_fallback_local", False):
         has_local = os.path.isdir(model) or _is_model_cached(model)
         if has_local:
-            log("[Groq] Moteur cloud sélectionné — chargement du modèle local en fallback...")
+            log("[Groq] Chargement du modèle local en fallback...")
         else:
-            log("[Groq] Moteur cloud sélectionné, pas de modèle local en cache — pas de fallback disponible.")
+            log("[Groq] Fallback activé mais pas de modèle local en cache — ignoré.")
             state.model = None
             return
 
@@ -442,9 +448,6 @@ def load_model():
         # --- Toujours fermer la fenêtre de progression ---
         if progress_window:
             progress_window.close()
-
-    if is_groq:
-        log("[Groq] Modèle local chargé en fallback (sera utilisé si Groq échoue).")
 
 
 # =============================================================================
@@ -631,7 +634,7 @@ def transcribe(audio: np.ndarray) -> str:
         # Correction fuzzy des noms propres
         if config.get("fuzzy_enabled", True):
             from fuzzy_correction import apply_fuzzy_corrections
-            threshold = config.get("fuzzy_threshold", 75)
+            threshold = config.get("fuzzy_threshold", 60)
             corrected = apply_fuzzy_corrections(text, threshold)
             if corrected != text:
                 log(f"[FUZZY] '{text}' -> '{corrected}'")
@@ -646,8 +649,8 @@ def transcribe(audio: np.ndarray) -> str:
 # Toggle enregistrement
 # =============================================================================
 def toggle_recording():
-    """Appelé quand Ctrl+Space est pressé."""
-    log("Ctrl+Space détecté !")
+    """Appelé quand le raccourci est pressé (Ctrl+Space ou Ctrl+²)."""
+    log("Raccourci dictée détecté !")
     try:
         with state.lock:
             if not state.recording:
@@ -681,32 +684,128 @@ def toggle_recording():
 # =============================================================================
 # Hotkey avec pynput (ne nécessite PAS les droits admin)
 # =============================================================================
+
+# Raccourcis disponibles (nom affiché -> détection pynput)
+AVAILABLE_HOTKEYS = [
+    "Ctrl+Space",
+    "Ctrl+²",
+    "Ctrl+F1",
+    "Ctrl+F2",
+    "Ctrl+F3",
+    "Ctrl+F4",
+    "Ctrl+F5",
+    "Ctrl+Shift+D",
+    "Ctrl+Shift+A",
+    "Ctrl+Shift+Space",
+    "Aucun",
+]
+
+
+def _parse_hotkey(name: str) -> dict:
+    """Parse un nom de raccourci en dict {ctrl, shift, key}."""
+    parts = name.lower().replace("+", " ").split()
+    return {
+        "ctrl": "ctrl" in parts,
+        "shift": "shift" in parts,
+        "key": parts[-1] if parts else "",
+    }
+
+
+def _match_key(key, expected_key: str) -> bool:
+    """Vérifie si une touche pynput correspond à la clé attendue."""
+    key_map = {
+        "space": pynput_keyboard.Key.space,
+        "f1": pynput_keyboard.Key.f1,
+        "f2": pynput_keyboard.Key.f2,
+        "f3": pynput_keyboard.Key.f3,
+        "f4": pynput_keyboard.Key.f4,
+        "f5": pynput_keyboard.Key.f5,
+        "f9": pynput_keyboard.Key.f9,
+        "f10": pynput_keyboard.Key.f10,
+        "f11": pynput_keyboard.Key.f11,
+        "f12": pynput_keyboard.Key.f12,
+    }
+    if expected_key in key_map:
+        return key == key_map[expected_key]
+    # Touche ² (AZERTY, vk=222)
+    if expected_key == "²":
+        try:
+            return key.vk == 222
+        except AttributeError:
+            return False
+    # Lettres (a, d, r, w, etc.)
+    if len(expected_key) == 1:
+        expected_vk = ord(expected_key.upper())
+        # Comparer via virtual key code (fiable même avec Ctrl/Shift enfoncés)
+        try:
+            vk = key.vk
+            if vk == expected_vk:
+                return True
+        except AttributeError:
+            pass
+    return False
+
+
 def setup_hotkey_pynput():
-    """Configure Ctrl+Space via pynput."""
+    """Configure les hotkeys via pynput (configurables depuis l'UI)."""
+    hk1_name = config.get("hotkey_primary", "Ctrl+Space")
+    hk2_name = config.get("hotkey_secondary", "Ctrl+Shift+D")
+
+    hk1 = _parse_hotkey(hk1_name) if hk1_name != "Aucun" else None
+    hk2 = _parse_hotkey(hk2_name) if hk2_name != "Aucun" else None
+
+    def _trigger():
+        threading.Thread(target=toggle_recording, daemon=True).start()
 
     def on_press(key):
-        if key == pynput_keyboard.Key.ctrl_l or key == pynput_keyboard.Key.ctrl_r:
-            state.ctrl_pressed = True
-        elif key == pynput_keyboard.Key.space and state.ctrl_pressed:
-            threading.Thread(target=toggle_recording, daemon=True).start()
-        # Echap global supprimé : trop de fermetures accidentelles.
-        # Pour quitter : clic droit sur l'icône tray > Quitter.
+        try:
+            if key == pynput_keyboard.Key.ctrl_l or key == pynput_keyboard.Key.ctrl_r:
+                state.ctrl_pressed = True
+                return
+            if key == pynput_keyboard.Key.shift_l or key == pynput_keyboard.Key.shift_r:
+                state.shift_pressed = True
+                return
+
+            if not state.ctrl_pressed:
+                return
+
+            # Vérifier hotkey 1
+            if hk1 and hk1["shift"] == state.shift_pressed and _match_key(key, hk1["key"]):
+                _trigger()
+                return
+            # Vérifier hotkey 2
+            if hk2 and hk2["shift"] == state.shift_pressed and _match_key(key, hk2["key"]):
+                _trigger()
+                return
+        except Exception as e:
+            logging.exception(f"Erreur hotkey on_press: {e}")
 
     def on_release(key):
         if key == pynput_keyboard.Key.ctrl_l or key == pynput_keyboard.Key.ctrl_r:
             state.ctrl_pressed = False
+        elif key == pynput_keyboard.Key.shift_l or key == pynput_keyboard.Key.shift_r:
+            state.shift_pressed = False
 
     listener = pynput_keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.daemon = True
     listener.start()
-    log("Hotkey Ctrl+Space enregistré via pynput (pas besoin d'admin).")
+
+    hotkeys = [h for h in [hk1_name, hk2_name] if h != "Aucun"]
+    log(f"Hotkeys enregistrés : {' et '.join(hotkeys)} (pynput, pas besoin d'admin).")
     return listener
 
 
 def setup_hotkey_keyboard():
-    """Configure Ctrl+Space via le module keyboard (nécessite admin)."""
+    """Configure les hotkeys via le module keyboard (nécessite admin)."""
     import keyboard
-    keyboard.add_hotkey("ctrl+space", lambda: threading.Thread(target=toggle_recording, daemon=True).start(), suppress=True)
+    hk1 = config.get("hotkey_primary", "Ctrl+Space")
+    hk2 = config.get("hotkey_secondary", "Ctrl+Shift+D")
+    if hk1 != "Aucun":
+        kb_name = hk1.lower().replace("+", "+")
+        keyboard.add_hotkey(kb_name, lambda: threading.Thread(target=toggle_recording, daemon=True).start(), suppress=True)
+    if hk2 != "Aucun":
+        kb_name = hk2.lower().replace("+", "+")
+        keyboard.add_hotkey(kb_name, lambda: threading.Thread(target=toggle_recording, daemon=True).start(), suppress=True)
     log("Hotkey Ctrl+Space enregistré via keyboard.")
     log("NOTE: Si ça ne marche pas, relance en Administrateur.")
 
@@ -942,7 +1041,10 @@ def main():
 
     print(flush=True)
     log("=" * 50)
-    log("PRÊT ! Appuie sur Ctrl+Space pour dicter.")
+    hk1 = config.get("hotkey_primary", "Ctrl+Space")
+    hk2 = config.get("hotkey_secondary", "Ctrl+Shift+D")
+    hotkeys = [h for h in [hk1, hk2] if h != "Aucun"]
+    log(f"PRÊT ! Appuie sur {' ou '.join(hotkeys)} pour dicter.")
     log("Le texte sera copié dans le presse-papier.")
     log("Clic droit sur l'icône tray pour quitter.")
     log("=" * 50)

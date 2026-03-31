@@ -74,6 +74,9 @@ def fuzzy_match_names(text: str, names_list: list[str], threshold: int = 75) -> 
     matched_indices: set[int] = set()
 
     # --- Passe 1 : groupes multi-mots (4, 3, 2) ---
+    # Ne matche que contre les noms composes (multi-mots) de la liste
+    multi_word_names = [n for n in names_list if " " in n.strip()]
+
     for group_size in range(4, 1, -1):
         for i in range(len(words) - group_size + 1):
             if any(j in matched_indices for j in range(i, i + group_size)):
@@ -101,7 +104,11 @@ def fuzzy_match_names(text: str, names_list: list[str], threshold: int = 75) -> 
                     matched_indices.add(j)
                 continue
 
-            best_match, best_score = _best_fuzzy(candidate, names_list)
+            # Ne comparer qu'avec les noms composes pour eviter
+            # qu'un groupe "Prenom Nom" ecrase le prenom
+            if not multi_word_names:
+                continue
+            best_match, best_score = _best_fuzzy(candidate, multi_word_names)
 
             if best_match and best_score >= threshold:
                 trailing_word = group_words[-1].group()
