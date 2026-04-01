@@ -121,10 +121,18 @@ def start_api_server(state, config, transcribe_fn):
 
 
 def _init_rtp_module(app, config):
-    """Initialise le module RTP : config, pool Whisper, Blueprint, auto-start."""
+    """Initialise le module RTP : config, pool Whisper, Blueprint, auto-start.
+
+    Ne fait rien si rtp_enabled=False pour éviter des imports inutiles.
+    """
     global _rtp_initialized
 
     if _rtp_initialized:
+        return
+
+    # Ne pas charger les modules RTP si RTP est désactivé
+    if not config.get("rtp_enabled", False):
+        logger.info("[RTP] Module RTP désactivé, import ignoré.")
         return
 
     try:
@@ -132,30 +140,28 @@ def _init_rtp_module(app, config):
         from api.rtp_config import apply_config
         apply_config(config)
 
-        # 2. Initialiser le pool de modèles Whisper (si RTP activé)
-        if config.get("rtp_enabled", False):
-            from api.whisper_pool import initialize_pool
-            logger.info("[RTP] Initialisation du pool de modèles Whisper pour RTP...")
-            success = initialize_pool(config)
-            if success:
-                from api.whisper_pool import get_pool_stats
-                stats = get_pool_stats()
-                logger.info(
-                    f"[RTP] Pool initialisé : {stats['total']} modèle(s), "
-                    f"{stats['available']} disponible(s)"
-                )
-            else:
-                logger.error("[RTP] Échec de l'initialisation du pool Whisper")
+        # 2. Initialiser le pool de modèles Whisper
+        from api.whisper_pool import initialize_pool
+        logger.info("[RTP] Initialisation du pool de modèles Whisper pour RTP...")
+        success = initialize_pool(config)
+        if success:
+            from api.whisper_pool import get_pool_stats
+            stats = get_pool_stats()
+            logger.info(
+                f"[RTP] Pool initialisé : {stats['total']} modèle(s), "
+                f"{stats['available']} disponible(s)"
+            )
+        else:
+            logger.error("[RTP] Échec de l'initialisation du pool Whisper")
 
         # 3. Enregistrer le Blueprint RTP
         from api.rtp_routes import rtp_bp
         app.register_blueprint(rtp_bp)
         logger.info("[RTP] Blueprint /rtp enregistré")
 
-        # 4. Auto-démarrer le listener si rtp_enabled=True
-        if config.get("rtp_enabled", False):
-            from api.rtp_routes import auto_start_listener
-            auto_start_listener(config)
+        # 4. Auto-démarrer le listener
+        from api.rtp_routes import auto_start_listener
+        auto_start_listener(config)
 
         _rtp_initialized = True
 
