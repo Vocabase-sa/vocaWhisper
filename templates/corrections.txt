@@ -1,0 +1,18 @@
+# =============================================
+# Corrections post-transcription
+# =============================================
+# Ce fichier permet de corriger automatiquement
+# les erreurs récurrentes de transcription.
+#
+# Format : erreur -> correction
+# Une correction par ligne.
+# Les lignes commençant par # sont ignorées.
+# La recherche est insensible à la casse.
+#
+# Exemples :
+# impatient -> un patient
+# noeud red -> Node-RED
+# post-graisse -> PostgreSQL
+# astérisque -> Asterisk
+#
+# Ajoutez ci-dessous vos corrections :

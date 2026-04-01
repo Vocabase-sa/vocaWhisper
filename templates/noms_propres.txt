@@ -1,0 +1,17 @@
+# =============================================
+# Noms propres pour correction fuzzy
+# =============================================
+# Ce fichier contient les noms propres (personnes,
+# lieux, services) que la correction fuzzy tentera
+# de reconnaître même si la transcription est approximative.
+#
+# Un nom par ligne (noms simples ou composés).
+# Les lignes commençant par # sont ignorées.
+#
+# Exemples :
+# Dupont
+# Van den Berg
+# Abugattas de Torres
+# Gastroentérologie
+#
+# Ajoutez ci-dessous vos noms propres :

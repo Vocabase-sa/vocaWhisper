@@ -31,6 +31,8 @@ WebRTC
 QoS
 CDR
 DID
+pcap
+sngrep
 
 # --- IoT / Automation ---
 Node-RED

@@ -1,0 +1,12 @@
+# Dépendances communes (tous les modes)
+sounddevice
+numpy
+pyperclip
+pystray
+Pillow
+pynput
+flask
+requests
+text2num
+groq
+rapidfuzz

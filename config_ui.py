@@ -31,6 +31,19 @@ if IS_WINDOWS:
         ctypes.c_wchar_p("vocabase.vocawhisper.settings")
     )
 
+# ---------------------------------------------------------------------------
+# Thème Vocabase (vocabase.be)
+# ---------------------------------------------------------------------------
+VOCABASE_CORAL = "#F07654"
+VOCABASE_CORAL_HOVER = "#d9613f"
+VOCABASE_BLUE = "#0c2d5c"
+VOCABASE_GREEN = "#10b981"
+VOCABASE_RED = "#ef4444"
+VOCABASE_PURPLE = "#8b5cf6"
+VOCABASE_BTN_DARK = "#32373c"
+VOCABASE_GRAY = "#626263"
+VOCABASE_LIGHT_GRAY = "#818181"
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 VOCAB_FILE = os.path.join(BASE_DIR, "vocabulaire.txt")
@@ -53,6 +66,7 @@ DEFAULTS = {
     "groq_api_key": "",
     "groq_model": "whisper-large-v3-turbo",
     "groq_fallback_local": False,
+    "install_mode": "full",
     "fuzzy_enabled": True,
     "fuzzy_threshold": 60,
     "api_enabled": False,
@@ -445,7 +459,7 @@ class ConfigWindow:
         self.cfg = load_config()
 
         self.root = tk.Tk()
-        self.root.title("Whisper Dictation - Paramètres")
+        self.root.title("VocaWhisper - Paramètres")
         self.root.geometry("700x750")
         self.root.resizable(True, True)
         self.root.minsize(700, 700)
@@ -453,9 +467,10 @@ class ConfigWindow:
         # Icône de la fenêtre (Vocabase)
         self._set_window_icon()
 
-        # Style
+        # Style Vocabase
         style = ttk.Style()
         style.configure("TNotebook.Tab", padding=[12, 4])
+        style.configure("Accent.TButton", background=VOCABASE_CORAL, foreground="white")
 
         # --- Boutons en bas (packés EN PREMIER avec side=bottom pour toujours être visibles) ---
         btn_frame = ttk.Frame(self.root, padding=10)
@@ -465,13 +480,15 @@ class ConfigWindow:
             btn_frame,
             text=" Sauvegarder ",
             command=self._save_and_close,
-            bg="#28a745",
+            bg=VOCABASE_CORAL,
             fg="white",
-            font=("Segoe UI", 9),
+            font=("Segoe UI", 9, "bold"),
             relief="flat",
             padx=10,
             pady=3,
             cursor="hand2",
+            activebackground=VOCABASE_CORAL_HOVER,
+            activeforeground="white",
         )
         save_btn.pack(side="right", padx=(5, 0))
 
@@ -479,13 +496,15 @@ class ConfigWindow:
             btn_frame,
             text=" Redémarrer ",
             command=self._save_and_restart,
-            bg="#dc3545",
+            bg=VOCABASE_BLUE,
             fg="white",
             font=("Segoe UI", 9),
             relief="flat",
             padx=10,
             pady=3,
             cursor="hand2",
+            activebackground="#0a2248",
+            activeforeground="white",
         )
         restart_btn.pack(side="right", padx=(5, 0))
 
@@ -519,7 +538,7 @@ class ConfigWindow:
 
         # Avertissement modèle anglais uniquement
         self.model_warning_label = tk.Label(
-            tab_general, text="", font=("Segoe UI", 9), anchor="w", fg="#dc3545",
+            tab_general, text="", font=("Segoe UI", 9), anchor="w", fg=VOCABASE_RED,
         )
         self.model_warning_label.grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 4), padx=(0, 0))
         self._update_model_status()
@@ -550,7 +569,7 @@ class ConfigWindow:
 
         # Indicateur modèle personnalisé
         self.custom_model_status = tk.Label(
-            tab_general, text="", font=("Segoe UI", 8), anchor="w", fg="#666666",
+            tab_general, text="", font=("Segoe UI", 8), anchor="w", fg=VOCABASE_GRAY,
         )
         self.custom_model_status.grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 4), padx=(20, 0))
         self.custom_model_var.trace_add("write", lambda *_: self._update_custom_model_status())
@@ -562,23 +581,25 @@ class ConfigWindow:
         row += 1
 
         # Device
-        ttk.Label(tab_general, text="Device :").grid(row=row, column=0, sticky="w", pady=6)
+        self.device_label = ttk.Label(tab_general, text="Device :")
+        self.device_label.grid(row=row, column=0, sticky="w", pady=6)
         self.device_var = tk.StringVar(value=self.cfg["device"])
         device_values = ["cuda", "cpu"]
         if IS_MAC:
             device_values = ["mps", "cpu"]
-        device_combo = ttk.Combobox(tab_general, textvariable=self.device_var, state="readonly", width=18,
+        self.device_combo = ttk.Combobox(tab_general, textvariable=self.device_var, state="readonly", width=18,
                                     values=device_values)
-        device_combo.grid(row=row, column=1, sticky="w", pady=6, padx=(10, 0))
+        self.device_combo.grid(row=row, column=1, sticky="w", pady=6, padx=(10, 0))
         ttk.Label(tab_general, text="*redémarrage requis", foreground="gray").grid(row=row, column=2, padx=(5, 0))
         row += 1
 
         # Compute type
-        ttk.Label(tab_general, text="Précision :").grid(row=row, column=0, sticky="w", pady=6)
+        self.compute_label = ttk.Label(tab_general, text="Précision :")
+        self.compute_label.grid(row=row, column=0, sticky="w", pady=6)
         self.compute_var = tk.StringVar(value=self.cfg["compute_type"])
-        compute_combo = ttk.Combobox(tab_general, textvariable=self.compute_var, state="readonly", width=18,
+        self.compute_combo = ttk.Combobox(tab_general, textvariable=self.compute_var, state="readonly", width=18,
                                      values=["float16", "float32", "int8"])
-        compute_combo.grid(row=row, column=1, sticky="w", pady=6, padx=(10, 0))
+        self.compute_combo.grid(row=row, column=1, sticky="w", pady=6, padx=(10, 0))
         ttk.Label(tab_general, text="*redémarrage requis", foreground="gray").grid(row=row, column=2, padx=(5, 0))
         row += 1
 
@@ -647,10 +668,13 @@ class ConfigWindow:
         row += 1
 
         ttk.Label(tab_general, text="Moteur STT :").grid(row=row, column=0, sticky="w", pady=6)
-        self.engine_var = tk.StringVar(value=self.cfg.get("stt_engine", "local"))
+        is_groq_only = self.cfg.get("install_mode") == "groq"
+        self.engine_var = tk.StringVar(value="groq" if is_groq_only else self.cfg.get("stt_engine", "local"))
+        engine_values = ["groq"] if is_groq_only else ["local", "groq"]
         engine_combo = ttk.Combobox(
-            tab_general, textvariable=self.engine_var, state="readonly", width=18,
-            values=["local", "groq"],
+            tab_general, textvariable=self.engine_var,
+            state="disabled" if is_groq_only else "readonly", width=18,
+            values=engine_values,
         )
         engine_combo.grid(row=row, column=1, sticky="w", pady=6, padx=(10, 0))
         ttk.Label(tab_general, text="*redémarrage requis", foreground="gray").grid(row=row, column=2, padx=(5, 0))
@@ -914,8 +938,9 @@ class ConfigWindow:
         ttk.Label(row_prep, text="(0.0 - 0.5)").pack(side="left", padx=(4, 0))
         tk.Button(
             row_prep, text="Préparer le dataset", command=self._run_prepare,
-            bg="#0d6efd", fg="white", font=("Segoe UI", 9, "bold"),
+            bg=VOCABASE_BLUE, fg="white", font=("Segoe UI", 9, "bold"),
             relief="flat", padx=8, pady=2, cursor="hand2",
+            activebackground="#0a2248", activeforeground="white",
         ).pack(side="right")
 
         # --- Section 2 : Entraînement ---
@@ -953,8 +978,9 @@ class ConfigWindow:
         row_launch.pack(fill="x", pady=(4, 0))
         tk.Button(
             row_launch, text="Lancer l'entraînement", command=self._run_train,
-            bg="#28a745", fg="white", font=("Segoe UI", 9, "bold"),
+            bg=VOCABASE_CORAL, fg="white", font=("Segoe UI", 9, "bold"),
             relief="flat", padx=8, pady=2, cursor="hand2",
+            activebackground=VOCABASE_CORAL_HOVER, activeforeground="white",
         ).pack(side="right")
 
         # --- Section 3 : Conversion CTranslate2 ---
@@ -970,8 +996,9 @@ class ConfigWindow:
         ]).pack(side="left", padx=(4, 0))
         tk.Button(
             row_conv, text="Convertir", command=self._run_convert,
-            bg="#6f42c1", fg="white", font=("Segoe UI", 9, "bold"),
+            bg=VOCABASE_PURPLE, fg="white", font=("Segoe UI", 9, "bold"),
             relief="flat", padx=8, pady=2, cursor="hand2",
+            activebackground="#7c3aed", activeforeground="white",
         ).pack(side="right")
 
         # --- Zone de log ---
@@ -997,8 +1024,9 @@ class ConfigWindow:
         self._stop_frame.pack(fill="x", pady=(4, 0))
         self._stop_btn = tk.Button(
             self._stop_frame, text="Arrêter le processus", command=self._stop_training_process,
-            bg="#dc3545", fg="white", font=("Segoe UI", 9),
+            bg=VOCABASE_RED, fg="white", font=("Segoe UI", 9),
             relief="flat", padx=8, pady=2, cursor="hand2",
+            activebackground="#dc2626", activeforeground="white",
         )
         # Pas de pack ici — affiché dynamiquement
 
@@ -1184,18 +1212,18 @@ class ConfigWindow:
             self.model_combo.config(state="readonly")
             self.custom_entry.config(state="disabled")
             self.custom_browse_btn.config(state="disabled")
-            self.custom_model_status.config(text="", fg="#666666")
+            self.custom_model_status.config(text="", fg=VOCABASE_GRAY)
 
     def _update_custom_model_status(self):
         """Met à jour l'indicateur du modèle personnalisé."""
         if not self.use_finetuned_var.get():
-            self.custom_model_status.config(text="", fg="#666666")
+            self.custom_model_status.config(text="", fg=VOCABASE_GRAY)
             return
         path = self.custom_model_var.get().strip()
         if not path:
             self.custom_model_status.config(
                 text="  Sélectionnez le dossier du modèle CTranslate2",
-                fg="#666666",
+                fg=VOCABASE_GRAY,
             )
         elif os.path.isdir(path):
             # Vérifier si c'est un modèle CTranslate2 valide
@@ -1204,27 +1232,55 @@ class ConfigWindow:
                 size_gb = os.path.getsize(model_bin) / 1e9
                 self.custom_model_status.config(
                     text=f"  \u2705  Modèle CTranslate2 trouvé ({size_gb:.2f} Go) — *redémarrage requis",
-                    fg="#28a745",
+                    fg=VOCABASE_GREEN,
                 )
             else:
                 self.custom_model_status.config(
                     text="  \u26a0  Dossier trouvé mais pas de model.bin",
-                    fg="#ff8c00",
+                    fg="#e67e22",
                 )
         else:
             self.custom_model_status.config(
                 text=f"  \u274c  Dossier introuvable : {path}",
-                fg="#dc3545",
+                fg=VOCABASE_RED,
             )
 
     def _toggle_groq_fields(self):
-        """Active/désactive les champs Groq selon le moteur sélectionné."""
+        """Active/désactive les champs Groq et modèle local selon le moteur et le mode d'installation."""
         is_groq = self.engine_var.get() == "groq"
+        is_groq_only = self.cfg.get("install_mode") == "groq"
+
+        # Champs Groq
         state = "normal" if is_groq else "disabled"
         readonly = "readonly" if is_groq else "disabled"
         self.groq_key_entry.config(state=state)
         self.groq_model_combo.config(state=readonly)
-        self.groq_fallback_check.config(state=state)
+
+        # Fallback : désactivé si groq-only (pas de modèle local installé)
+        if is_groq_only:
+            self.groq_fallback_var.set(False)
+            self.groq_fallback_check.config(state="disabled")
+        else:
+            self.groq_fallback_check.config(state=state)
+
+        # Widgets modèle local : désactivés en mode groq-only
+        if is_groq_only:
+            local_state = "disabled"
+            self.model_combo.config(state="disabled")
+            self.device_combo.config(state="disabled")
+            self.compute_combo.config(state="disabled")
+            self.use_finetuned_cb.config(state="disabled")
+            self.custom_entry.config(state="disabled")
+            self.custom_browse_btn.config(state="disabled")
+            # Forcer le moteur sur groq (pas de choix local possible)
+            self.engine_var.set("groq")
+        else:
+            # Rétablir l'état normal des widgets locaux
+            if not self.use_finetuned_var.get():
+                self.model_combo.config(state="readonly")
+            self.device_combo.config(state="readonly")
+            self.compute_combo.config(state="readonly")
+            self.use_finetuned_cb.config(state="normal")
 
     def _toggle_api_fields(self):
         """Active/désactive les champs API selon la checkbox."""
@@ -1241,19 +1297,19 @@ class ConfigWindow:
             size_gb = _get_dir_size_gb(cache_path)
             self.model_status_label.config(
                 text=f"  \u2705  En local ({size_gb:.2f} Go)",
-                fg="#28a745",
+                fg=VOCABASE_GREEN,
             )
         else:
             expected_gb = MODEL_SIZES_GB.get(model, 0)
             if expected_gb > 0:
                 self.model_status_label.config(
                     text=f"  \u2b07  \u00c0 t\u00e9l\u00e9charger (~{expected_gb:.1f} Go)",
-                    fg="#dc3545",
+                    fg=VOCABASE_RED,
                 )
             else:
                 self.model_status_label.config(
                     text=f"  \u2b07  \u00c0 t\u00e9l\u00e9charger",
-                    fg="#dc3545",
+                    fg=VOCABASE_RED,
                 )
 
         # Avertissement si modèle anglais uniquement + langue non anglaise
@@ -1281,12 +1337,12 @@ class ConfigWindow:
             if remaining >= 0:
                 self.token_label.config(
                     text=f"Tokens : {token_count} / {max_tokens} utilises   |   {remaining} restants",
-                    fg="#28a745",
+                    fg=VOCABASE_GREEN,
                 )
             else:
                 self.token_label.config(
                     text=f"Tokens : {token_count} / {max_tokens} utilises   |   {abs(remaining)} en trop (sera tronque)",
-                    fg="#dc3545",
+                    fg=VOCABASE_RED,
                 )
         else:
             # Pas de tokenizer disponible : estimation approximative
@@ -1295,7 +1351,7 @@ class ConfigWindow:
             approx = len(", ".join(words).split()) if words else 0
             self.token_label.config(
                 text=f"~{approx} mots (tokenizer non disponible, estimation)",
-                fg="#666666",
+                fg=VOCABASE_GRAY,
             )
 
     def _on_noms_modified(self, _=None):
@@ -1311,7 +1367,7 @@ class ConfigWindow:
         count = len(lines)
         self.noms_count_label.config(
             text=f"{count} nom(s) propre(s) enregistre(s)",
-            fg="#28a745" if count > 0 else "#666666",
+            fg=VOCABASE_GREEN if count > 0 else VOCABASE_GRAY,
         )
 
     def _update_gain_label(self, _=None):

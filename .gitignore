@@ -209,3 +209,7 @@ logs/
 # Fichiers de donnees generees (specifiques a l'environnement)
 corrections.txt
 vocabulaire.txt
+
+# Mais garder les templates
+!templates/corrections.txt
+!templates/vocabulaire.txt

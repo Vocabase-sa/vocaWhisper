@@ -8,18 +8,20 @@ Supporte deux moteurs de transcription : [faster-whisper](https://github.com/SYS
 
 ## Fonctionnalites
 
+- **Installeur graphique** : assistant d'installation wizard avec interface Vocabase (selection du mode, progression en temps reel, cle API Groq)
+- **Deux modes d'installation** : Groq Cloud (leger, pas de GPU) ou Complet (modele local + GPU/CPU)
 - **Raccourcis configurables** : 2 raccourcis clavier au choix (Ctrl+Space, Ctrl+², Ctrl+F1-F5, Ctrl+Shift+D/A/Space) configurables depuis l'UI
 - **Double moteur STT** : transcription locale (faster-whisper) ou cloud (Groq), avec fallback automatique optionnel
 - **Collage automatique** : le texte transcrit est colle directement dans l'application active
 - **Prompt initial** : ajoutez des mots techniques pour orienter la reconnaissance vocale
 - **Corrections automatiques** : regles de post-traitement pour corriger les erreurs recurrentes
-- **Correction fuzzy des noms propres** : corrige automatiquement les noms propres mal transcrits via [rapidfuzz](https://github.com/rapidfuzz/RapidFuzz), avec seuil configurable
+- **Correction fuzzy des noms propres** : corrige automatiquement les noms propres mal transcrits via [rapidfuzz](https://github.com/rapidfuzz/RapidFuzz), avec seuil configurable (defaut 60)
 - **Fine-tuning Whisper** : entrainez le modele sur vos propres donnees audio pour ameliorer la reconnaissance de votre vocabulaire
 - **API HTTP** : endpoint `/transcribe` pour integrer la dictee dans d'autres applications (Flask)
 - **Icone system tray** : acces rapide aux parametres et controle de l'application
 - **Overlay futuriste** : pilule flottante avec indicateur REC, timer et barres audio animees en temps reel
-- **Choix du microphone** : selection du peripherique audio dans les parametres
-- **Demarrage automatique** : option pour lancer l'application au demarrage du systeme
+- **Mise a jour automatique** : verification des mises a jour au demarrage avec notification dans le tray
+- **Multi-plateforme** : Windows, macOS (Apple Silicon + Intel), Linux (Debian/Fedora/Arch)
 - **Multi-modeles** : tiny, base, small, medium, large-v2, large-v3, large-v3-turbo, distil-large-v3
 - **Fenetre de telechargement** : progression visuelle lors du telechargement initial du modele
 - **Detection du cache** : affiche si chaque modele est deja telecharge ou a telecharger, avec sa taille
@@ -30,11 +32,11 @@ Supporte deux moteurs de transcription : [faster-whisper](https://github.com/SYS
 
 | Element | Version |
 |---------|---------|
-| Python | 3.10 ou superieur |
+| Python | 3.10 - 3.12 (3.13+ supporte en mode Groq uniquement) |
 | OS | Windows 10/11, macOS 12+, Linux (X11/Wayland) |
-| GPU (optionnel) | NVIDIA GTX/RTX (CUDA) ou Apple Silicon M1/M2/M3/M4 (MPS) |
+| GPU (optionnel) | NVIDIA GTX/RTX (CUDA) ou Apple Silicon M1-M4 (MPS) |
 
-> **Note** : Un GPU est fortement recommande pour les modeles `large`. Sur CPU, privilegiez les modeles `small` ou `medium`.
+> **Note** : Un GPU est fortement recommande pour les modeles `large`. Sur CPU, privilegiez les modeles `small` ou `medium`. En mode **Groq Cloud**, aucun GPU n'est requis.
 
 ---
 
@@ -42,7 +44,7 @@ Supporte deux moteurs de transcription : [faster-whisper](https://github.com/SYS
 
 ### Windows
 
-#### Methode rapide (recommandee)
+#### Methode recommandee (installeur graphique)
 
 ```
 git clone https://github.com/Vocabase-sa/vocaWhisper.git
@@ -50,11 +52,14 @@ cd vocaWhisper
 install_windows.bat
 ```
 
-Double-cliquez sur `install_windows.bat` et suivez les instructions :
-1. Le script verifie que Python est installe
-2. Cree un environnement virtuel (`venv`)
-3. Demande si vous avez un GPU NVIDIA (choix CUDA ou CPU)
-4. Installe PyTorch et toutes les dependances
+Double-cliquez sur `install_windows.bat`. Le script :
+1. Detecte Python automatiquement (PATH, py launcher, chemins courants)
+2. Si Python absent : installe via winget ou telecharge depuis python.org
+3. Lance l'**installeur graphique** avec 4 etapes :
+   - **Accueil** : choix du dossier d'installation
+   - **Mode** : Groq Cloud, GPU NVIDIA (CUDA) ou CPU
+   - **Installation** : progression en temps reel (venv, dependances, PyTorch)
+   - **Termine** : resume et lancement de l'application
 
 #### Methode manuelle
 
@@ -64,14 +69,18 @@ cd vocaWhisper
 python -m venv venv
 venv\Scripts\activate.bat
 
-# Avec GPU NVIDIA :
+# Mode Groq (leger) :
+pip install -r requirements-base.txt
+
+# Mode complet avec GPU NVIDIA :
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+pip install -r requirements-base.txt
+pip install -r requirements-local.txt
 
-# Ou sans GPU :
+# Mode complet sans GPU :
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-
-pip install -r requirements.txt
-pip install pynput
+pip install -r requirements-base.txt
+pip install -r requirements-local.txt
 ```
 
 #### Lancement (Windows)
@@ -93,9 +102,10 @@ chmod +x install_mac.sh
 ./install_mac.sh
 ```
 
-Le script detecte automatiquement l'architecture :
-- **Apple Silicon (M1/M2/M3/M4)** : installe PyTorch avec MPS (Metal), modele recommande `large-v3-turbo`
-- **Intel Mac** : installe PyTorch CPU, modele recommande `small`
+Le script installe Python via Homebrew si necessaire, puis lance l'**installeur graphique**.
+
+- **Apple Silicon (M1-M4)** : mode MPS (Metal), modele recommande `large-v3-turbo`
+- **Intel Mac** : mode CPU, modele recommande `small`
 
 #### Lancement (macOS)
 
@@ -113,37 +123,11 @@ Le script detecte automatiquement l'architecture :
 ```bash
 git clone https://github.com/Vocabase-sa/vocaWhisper.git
 cd vocaWhisper
-python3 -m venv venv
-source venv/bin/activate
-
-# Avec GPU NVIDIA :
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-
-# Ou sans GPU :
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-
-pip install -r requirements.txt
-pip install pynput
+chmod +x install_linux.sh
+./install_linux.sh
 ```
 
-#### Dependances systeme (Linux)
-
-Selon votre distribution, vous pourriez avoir besoin de :
-
-```bash
-# Debian / Ubuntu
-sudo apt install python3-tk portaudio19-dev xclip
-
-# Fedora
-sudo dnf install python3-tkinter portaudio-devel xclip
-
-# Arch Linux
-sudo pacman -S tk portaudio xclip
-```
-
-- `python3-tk` : interface de parametres (tkinter)
-- `portaudio` : capture audio (requis par sounddevice)
-- `xclip` : presse-papier (requis par pyperclip sur X11)
+Le script installe les dependances systeme automatiquement (Python, tkinter, PortAudio, xclip/wl-clipboard) selon votre distribution (apt/dnf/pacman), puis lance l'**installeur graphique**.
 
 #### Lancement (Linux)
 
@@ -152,7 +136,30 @@ source venv/bin/activate
 python3 whisper_dictation.py
 ```
 
-> **Note** : Sur Wayland, `xclip` peut ne pas fonctionner. Installez `wl-clipboard` a la place et configurez pyperclip en consequence.
+> **Note** : Sur Wayland, `xclip` peut ne pas fonctionner. Le script installe `wl-clipboard` automatiquement si Wayland est detecte.
+
+---
+
+## Mise a jour
+
+### Automatique (au demarrage)
+
+VocaWhisper verifie les mises a jour au demarrage. Si une nouvelle version est disponible, une notification apparait dans le system tray.
+
+### Manuelle
+
+**Windows :**
+```
+update_windows.bat
+```
+
+**macOS / Linux :**
+```bash
+chmod +x update.sh
+./update.sh
+```
+
+Le script met a jour les fichiers via `git pull` (ou telecharge un ZIP si git n'est pas disponible), puis met a jour les dependances Python. Les fichiers utilisateur (`config.json`, `noms_propres.txt`, `vocabulaire.txt`, `corrections.txt`) ne sont jamais ecrases.
 
 ---
 
@@ -170,6 +177,7 @@ Ou utilisez les parametres via l'icone system tray (clic droit > Parametres).
 
 | Parametre | Description | Valeurs |
 |-----------|-------------|---------|
+| `install_mode` | Mode d'installation | `groq` (cloud uniquement) ou `full` (modele local) |
 | `model_size` | Modele Whisper | `tiny`, `base`, `small`, `medium`, `large-v2`, `large-v3`, `large-v3-turbo`, `distil-large-v3` |
 | `device` | Peripherique de calcul | `cuda` (NVIDIA), `mps` (Apple Silicon), `cpu` |
 | `compute_type` | Precision numerique | `float16` (GPU), `float32`, `int8` (CPU) |
@@ -234,7 +242,7 @@ Raccourcis disponibles : `Ctrl+Space`, `Ctrl+²`, `Ctrl+F1` a `Ctrl+F5`, `Ctrl+S
 
 Un clic droit sur l'icone dans la barre des taches donne acces a :
 
-- **Parametres** : ouvre la fenetre de configuration (onglets General, Prompt initial, Corrections, Noms propres, Training)
+- **Parametres** : ouvre la fenetre de configuration (onglets General, Reseau, Prompt initial, Corrections, Noms propres, Training)
 - **Quitter** : ferme l'application
 
 L'icone change de couleur : **verte** = pret, **rouge** = enregistrement en cours.
@@ -265,7 +273,7 @@ Pendant l'enregistrement, une pilule futuriste flottante s'affiche en bas de l'e
 
 ## Parametres (interface graphique)
 
-Accessible via clic droit sur l'icone tray > **Parametres**. La fenetre comporte 5 onglets :
+Accessible via clic droit sur l'icone tray > **Parametres**. Interface au style Vocabase (corail, bleu fonce). La fenetre comporte 6 onglets :
 
 ### Onglet General
 
@@ -282,6 +290,8 @@ Accessible via clic droit sur l'icone tray > **Parametres**. La fenetre comporte
 | **Raccourci 1 / 2** | Raccourcis clavier configurables | Choisissez parmi la liste (Ctrl+Space, Ctrl+², Ctrl+F1-F5, etc.). Un changement necessite un redemarrage. |
 | **Moteur STT** | Moteur de transcription | `local` (faster-whisper) ou `groq` (cloud). Voir section Groq ci-dessous. |
 
+> En mode d'installation **Groq uniquement**, les champs modele local, device et precision sont desactives.
+
 L'onglet General affiche aussi :
 - Un indicateur en temps reel pour chaque modele : **en local** (avec la taille) ou **a telecharger** (avec la taille estimee)
 - Un **avertissement** si un modele anglais uniquement est selectionne avec une autre langue
@@ -296,6 +306,10 @@ Quand le moteur STT est regle sur `groq` :
 > **Avantage Groq** : demarrage quasi-instantane (pas de chargement de modele GPU), transcription tres rapide. Necessite une connexion internet.
 
 > **Fallback** : si le fallback est desactive, le modele local n'est pas charge en memoire, ce qui reduit drastiquement le temps de demarrage et la consommation VRAM.
+
+### Onglet Reseau
+
+Configuration de l'API HTTP et des parametres reseau (host, port).
 
 ### Onglet Prompt initial
 
@@ -411,13 +425,11 @@ Cliquez sur **Lancer l'entrainement**. Le Journal affiche :
 
 > **Duree** : Environ 30 secondes par epoque pour 5 exemples sur RTX 4090. Le temps augmente lineairement avec le nombre d'exemples.
 
-L'encoder est automatiquement gele pour eviter le "catastrophic forgetting" (perte des connaissances du modele original). Seul le decoder est fine-tune, ce qui est suffisant pour apprendre votre vocabulaire.
-
 #### Etape 3 : Convertir le modele
 
-Une fois l'entrainement termine, le modele doit etre converti au format **CTranslate2** pour etre utilise par Vocabase (faster-whisper).
+Une fois l'entrainement termine, le modele doit etre converti au format **CTranslate2** pour etre utilise par VocaWhisper (faster-whisper).
 
-1. Selectionnez la quantization **float16** (recommande pour GPU, reduit la taille du modele de moitie sans perte de qualite)
+1. Selectionnez la quantization **float16** (recommande pour GPU)
 2. Cliquez sur **Convertir**
 3. Le Journal affiche la progression de la conversion
 
@@ -434,35 +446,7 @@ Une fois l'entrainement termine, le modele doit etre converti au format **CTrans
 3. Dans le champ **Modele personnalise**, entrez le chemin : `fine_tuning/model_ct2`
 4. Cliquez sur **Sauvegarder** puis **Redemarrer**
 
-Vocabase utilisera desormais votre modele fine-tune. Pour revenir au modele standard, videz le champ **Modele personnalise** et redemarrez.
-
-#### Utilisation en ligne de commande (optionnel)
-
-Le fine-tuning peut aussi etre lance en ligne de commande :
-
-```bash
-# Activer l'environnement virtuel
-# Windows : venv\Scripts\activate.bat
-# macOS/Linux : source venv/bin/activate
-
-# 1. Preparer le dataset
-python fine_tuning/prepare_dataset.py
-
-# 2. Entrainer (GPU NVIDIA recommande)
-python fine_tuning/train.py --epochs 3 --batch_size 8
-
-# 3. Convertir en CTranslate2
-python fine_tuning/convert_to_ct2.py --quantization float16
-```
-
-#### Compatibilite
-
-| Plateforme | Device | Support |
-|------------|--------|---------|
-| Windows + NVIDIA | CUDA | Pleinement supporte |
-| Linux + NVIDIA | CUDA | Pleinement supporte |
-| macOS Apple Silicon | MPS | Supporte (plus lent) |
-| Tout OS sans GPU | CPU | Supporte (lent, petits datasets uniquement) |
+VocaWhisper utilisera desormais votre modele fine-tune. Pour revenir au modele standard, videz le champ **Modele personnalise** et redemarrez.
 
 ---
 
@@ -470,30 +454,42 @@ python fine_tuning/convert_to_ct2.py --quantization float16
 
 ```
 vocaWhisper/
-├── whisper_dictation.py   # Application principale
-├── config_ui.py           # Interface de parametres (tkinter)
-├── fuzzy_correction.py    # Correction fuzzy des noms propres (rapidfuzz)
-├── overlay_ui.py          # Overlay futuriste d'enregistrement
-├── download_ui.py         # Fenetre de progression du telechargement
-├── api/                   # API HTTP (Flask)
-│   ├── server.py          # Serveur Flask (/transcribe, /health)
+├── whisper_dictation.py    # Application principale
+├── config_ui.py            # Interface de parametres (tkinter, theme Vocabase)
+├── fuzzy_correction.py     # Correction fuzzy des noms propres (rapidfuzz)
+├── overlay_ui.py           # Overlay futuriste d'enregistrement
+├── download_ui.py          # Fenetre de progression du telechargement
+├── installer.py            # Installeur graphique wizard (tkinter)
+├── api/                    # API HTTP (Flask)
+│   ├── server.py           # Serveur Flask (/transcribe, /health)
 │   └── __init__.py
-├── config.json.example    # Exemple de configuration
-├── vocabulaire.txt        # Prompt initial pour Whisper
-├── corrections.txt        # Regles de correction post-transcription
-├── noms_propres.txt       # Noms propres pour correction fuzzy
-├── requirements.txt       # Dependances Python
-├── fine_tuning/           # Pipeline de fine-tuning Whisper
-│   ├── prepare_dataset.py # Preparation du dataset audio
-│   ├── train.py           # Entrainement du modele
-│   ├── convert_to_ct2.py  # Conversion vers CTranslate2
-│   ├── requirements.txt   # Dependances fine-tuning
-│   └── data/              # Donnees d'entrainement (audio + CSV)
-├── icons/                 # Icones personnalisees (icon_green.png, icon_red.png)
-├── install_windows.bat    # Script d'installation Windows
-├── install_mac.sh         # Script d'installation macOS
-├── run.bat                # Lanceur Windows (avec console)
-├── run_silent.vbs         # Lanceur Windows (sans fenetre)
+├── templates/              # Fichiers modeles pour nouvelles installations
+│   ├── vocabulaire.txt     # Template prompt initial (avec exemples commentes)
+│   ├── corrections.txt     # Template corrections (avec exemples commentes)
+│   ├── noms_propres.txt    # Template noms propres (avec exemples commentes)
+│   └── transcriptions.csv  # Template CSV fine-tuning (en-tete seul)
+├── config.json.example     # Exemple de configuration
+├── vocabulaire.txt         # Prompt initial pour Whisper
+├── corrections.txt         # Regles de correction post-transcription
+├── noms_propres.txt        # Noms propres pour correction fuzzy
+├── VERSION                 # Version courante (ex: 1.5.0)
+├── requirements-base.txt   # Dependances communes (tous modes)
+├── requirements-local.txt  # Dependances mode local (faster-whisper)
+├── requirements.txt        # Dependances legacy (retrocompatibilite)
+├── fine_tuning/            # Pipeline de fine-tuning Whisper
+│   ├── prepare_dataset.py  # Preparation du dataset audio
+│   ├── train.py            # Entrainement du modele
+│   ├── convert_to_ct2.py   # Conversion vers CTranslate2
+│   ├── requirements.txt    # Dependances fine-tuning
+│   └── data/               # Donnees d'entrainement (audio + CSV)
+├── icons/                  # Icones (icon_green.png, icon_red.png, logo_vocabase.png)
+├── install_windows.bat     # Bootstrap installation Windows
+├── install_mac.sh          # Bootstrap installation macOS
+├── install_linux.sh        # Bootstrap installation Linux
+├── update_windows.bat      # Mise a jour Windows
+├── update.sh               # Mise a jour macOS / Linux
+├── run.bat                 # Lanceur Windows (avec console)
+├── run_silent.vbs          # Lanceur Windows (sans fenetre)
 └── .gitignore
 ```
 
@@ -508,7 +504,7 @@ VocaWhisper expose une API REST (Flask) pour integrer la transcription dans d'au
 | `/transcribe` | POST | Envoie un fichier audio et recoit la transcription |
 | `/health` | GET | Etat du serveur (moteur STT, pret ou non) |
 
-Activable dans les parametres (onglet General > API). Par defaut sur le port `5892`.
+Activable dans les parametres (onglet Reseau). Par defaut sur le port `5892`.
 
 Exemple :
 ```bash
@@ -538,14 +534,15 @@ Tous les logs sont centralises dans le dossier `logs/` :
 | Texte non colle | Verifiez que `auto_paste` est active et que l'application cible accepte Ctrl+V |
 | Parametres ne s'ouvrent pas | Verifiez les logs ; l'interface se lance dans un processus separe |
 | Modele distil ne transcrit pas le francais | Les modeles `distil` ne supportent que l'anglais. Utilisez `large-v3` ou `large-v3-turbo` |
-| Modele affiche "a telecharger" alors qu'il est present | Le nom du cache peut varier selon l'org. Mettez a jour vers la derniere version |
 | L'app se ferme toute seule | Verifiez les logs (`logs/whisper_dictation.log`) pour identifier la cause |
 | Raccourci ne fonctionne pas | Verifiez le raccourci configure dans les parametres. Les touches F1-F5 sont les plus fiables. Ctrl+² necessite un clavier AZERTY. |
 | Groq echoue | Verifiez votre cle API et votre connexion internet. Activez le fallback local si necessaire. |
 | Noms propres mal corriges | Ajustez le seuil fuzzy (plus bas = plus tolerant). Verifiez que le nom est bien dans `noms_propres.txt`. |
+| Installation echoue (PyTorch) | Python 3.13+ n'est pas supporte par PyTorch. L'installeur utilise automatiquement Python 3.12 si disponible. |
+| `install_windows.bat` ne lance rien | Verifiez que Python est dans le PATH. Le script tente aussi `py -3` et les chemins courants. |
 
 ---
 
 ## Licence
 
-Ce projet est un outil interne. Contactez les mainteneurs pour les conditions d'utilisation.
+Ce projet est un outil interne [Vocabase](https://www.vocabase.be). Contactez les mainteneurs pour les conditions d'utilisation.

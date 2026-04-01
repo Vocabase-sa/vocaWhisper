@@ -1,0 +1,18 @@
+# =============================================
+# Vocabulaire technique pour Whisper
+# =============================================
+# Ce fichier contient les mots et expressions techniques
+# que Whisper doit reconnaître correctement (prompt initial).
+#
+# Un mot ou expression par ligne.
+# Les lignes commençant par # sont ignorées.
+# ATTENTION : limite ~224 tokens. Gardez l'essentiel !
+#
+# Exemples :
+# SIP
+# Node-RED
+# PostgreSQL
+# Kamailio
+# Gastroentérologie
+#
+# Ajoutez ci-dessous vos termes métier :

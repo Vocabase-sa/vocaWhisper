@@ -1,0 +1,4 @@
+# Dépendances supplémentaires pour le mode local (faster-whisper)
+faster-whisper
+huggingface_hub
+tokenizers

@@ -29,7 +29,12 @@ if IS_WINDOWS:
 import numpy as np
 import sounddevice as sd
 import pyperclip
-from faster_whisper import WhisperModel
+try:
+    from faster_whisper import WhisperModel
+    _HAS_FASTER_WHISPER = True
+except ImportError:
+    WhisperModel = None
+    _HAS_FASTER_WHISPER = False
 from overlay_ui import show_overlay, hide_overlay
 
 # --- Import du système de hotkey ---
@@ -79,6 +84,41 @@ if sys.stdout is None:
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 VOCAB_FILE = os.path.join(BASE_DIR, "vocabulaire.txt")
 CORRECTIONS_FILE = os.path.join(BASE_DIR, "corrections.txt")
+VERSION_FILE = os.path.join(BASE_DIR, "VERSION")
+
+GITHUB_VERSION_URL = "https://raw.githubusercontent.com/Vocabase-sa/vocaWhisper/main/VERSION"
+
+
+def get_local_version() -> str:
+    """Lit la version locale depuis le fichier VERSION."""
+    if os.path.exists(VERSION_FILE):
+        with open(VERSION_FILE, "r") as f:
+            return f.read().strip()
+    return "0.0.0"
+
+
+def check_for_updates() -> dict | None:
+    """Vérifie si une mise à jour est disponible sur GitHub.
+
+    Returns:
+        dict avec 'local', 'remote', 'update_available' ou None si erreur.
+    """
+    import urllib.request
+    local = get_local_version()
+    try:
+        req = urllib.request.Request(GITHUB_VERSION_URL, headers={"User-Agent": "VocaWhisper"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            remote = resp.read().decode("utf-8").strip()
+        # Comparaison simple par tuple de version
+        local_parts = tuple(int(x) for x in local.split("."))
+        remote_parts = tuple(int(x) for x in remote.split("."))
+        return {
+            "local": local,
+            "remote": remote,
+            "update_available": remote_parts > local_parts,
+        }
+    except Exception:
+        return None
 SAMPLE_RATE = 16000
 CHANNELS = 1
 
@@ -98,6 +138,7 @@ DEFAULTS = {
     "groq_api_key": "",
     "groq_model": "whisper-large-v3-turbo",
     "groq_fallback_local": False,
+    "install_mode": "full",
     "fuzzy_enabled": True,
     "fuzzy_threshold": 60,
     "api_enabled": False,
@@ -380,6 +421,11 @@ def load_model():
         if custom_path:
             log(f"[WARN] Chemin modèle personnalisé introuvable : {custom_path}")
             log(f"       Fallback sur le modèle standard : {model}")
+
+    if not _HAS_FASTER_WHISPER:
+        log("[Groq-only] faster-whisper non installé — mode cloud uniquement.")
+        state.model = None
+        return
 
     if config.get("stt_engine") == "groq" and not config.get("groq_fallback_local", False):
         log("[Groq] Moteur cloud sélectionné — pas de modèle local à charger.")
@@ -982,6 +1028,7 @@ def main():
     print("=" * 60, flush=True)
     print(flush=True)
 
+    log(f"VocaWhisper v{get_local_version()}")
     log(f"Python {sys.version}")
     log(f"Config : modèle={config['model_size']}, device={config['device']}, gain={config['audio_gain']}, langue={config['language']}")
     log(f"Backend hotkey : {HOTKEY_BACKEND}")
@@ -1049,6 +1096,27 @@ def main():
     log("Clic droit sur l'icône tray pour quitter.")
     log("=" * 50)
     print(flush=True)
+
+    # Vérifier les mises à jour en arrière-plan
+    def _check_updates_bg():
+        try:
+            result = check_for_updates()
+            if result and result["update_available"]:
+                log(f"[MAJ] Mise à jour disponible : v{result['remote']} (actuelle: v{result['local']})")
+                log("[MAJ] Lancez update_windows.bat pour mettre à jour.")
+                # Notification tray si disponible
+                if HAS_TRAY and state.tray_icon:
+                    try:
+                        state.tray_icon.notify(
+                            f"Version {result['remote']} disponible",
+                            "VocaWhisper — Mise à jour",
+                        )
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    threading.Thread(target=_check_updates_bg, daemon=True).start()
 
     # Boucle principale
     try:
