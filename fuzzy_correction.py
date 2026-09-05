@@ -11,8 +11,15 @@ Strategie en 2 passes (identique a stt-api) :
 import os
 import re
 import logging
+import unicodedata
 
 from rapidfuzz import fuzz
+
+
+def _strip_accents(text: str) -> str:
+    """Retire les accents, pour comparer aux listes ecrites sans diacritiques."""
+    decomposed = unicodedata.normalize("NFD", text)
+    return "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +29,33 @@ NOMS_PROPRES_FILE = os.path.join(BASE_DIR, "noms_propres.txt")
 # Mots de titre ignores en debut de groupe multi-mots
 _TITLE_WORDS = frozenset({
     "docteur", "doctor", "dr", "monsieur", "madame", "mme", "mr", "professeur", "pr",
+})
+
+# Mots jamais remplaces par un nom propre, meme si le score le justifie.
+# Sans cette protection, un annuaire un peu fourni ecrase le francais courant :
+# "docteur" devient "CRETEUR" (score 86), "voudrais" devient "VOUDRAI", etc.
+# Le risque croit avec la taille de l'annuaire, puisque chaque mot est compare
+# a TOUS les noms.
+_PROTECTED_WORDS = _TITLE_WORDS | frozenset({
+    # pronoms et determinants
+    "je", "tu", "il", "elle", "on", "nous", "vous", "ils", "elles", "me", "te", "se",
+    "le", "la", "les", "un", "une", "des", "du", "au", "aux", "ce", "cet", "cette",
+    "mon", "ton", "son", "ma", "ta", "sa", "mes", "tes", "ses", "notre", "votre",
+    "leur", "leurs", "qui", "que", "quoi", "dont", "ou",
+    # verbes frequents
+    "est", "sont", "etre", "suis", "ete", "avoir", "avait", "aurait", "fait",
+    "faire", "peut", "peux", "pouvez", "veux", "veut", "voulez", "voudrais",
+    "voudrait", "aimerais", "cherche", "cherchez", "appelle", "parler", "passer",
+    "avoir", "dire", "voir", "savoir", "mettre", "prendre",
+    # mots outils
+    "pas", "plus", "moins", "tres", "bien", "mal", "oui", "non", "merci",
+    "bonjour", "bonsoir", "revoir", "salut", "avec", "sans", "pour", "par",
+    "sur", "sous", "dans", "chez", "vers", "entre", "mais", "donc", "car",
+    "puis", "aussi", "encore", "deja", "toujours", "jamais", "peut-etre",
+    "sil", "plait", "plait", "silvous",
+    # metier
+    "service", "consultation", "rendez", "vous", "urgence", "urgences",
+    "secretariat", "accueil", "poste", "numero", "telephone", "appel",
 })
 
 
@@ -127,6 +161,10 @@ def fuzzy_match_names(text: str, names_list: list[str], threshold: int = 75) -> 
         if len(clean) < 3:
             continue
         if clean.lower() in names_lower:
+            continue
+        # Ne jamais transformer un mot courant en nom propre : la passe 1
+        # protege deja les titres, la passe 2 doit en faire autant.
+        if _strip_accents(clean.lower()) in _PROTECTED_WORDS:
             continue
 
         best_match, best_score = _best_fuzzy(clean, names_list)

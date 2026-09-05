@@ -50,6 +50,67 @@ VOCAB_FILE = os.path.join(BASE_DIR, "vocabulaire.txt")
 CORRECTIONS_FILE = os.path.join(BASE_DIR, "corrections.txt")
 NOMS_PROPRES_FILE = os.path.join(BASE_DIR, "noms_propres.txt")
 
+# Modèles wav2vec2 utilisables en INFÉRENCE. Vérifiés un par un : chacun
+# possède un vocab.json, donc une tête CTC entraînée. Les bases sans tête
+# (LeBenchmark) sont volontairement absentes — elles ne transcrivent rien tant
+# qu'elles n'ont pas été fine-tunées, et n'ont leur place que dans l'onglet
+# Training.
+WAV2VEC2_MODELS = {
+    "jonatasgrosman/wav2vec2-large-xlsr-53-french": (1.26, "315M — référence, rapide"),
+    "bofenghuang/asr-wav2vec2-ctc-french": (3.52, "315M — mieux entraîné en FR"),
+    "jonatasgrosman/wav2vec2-xls-r-1b-french": (3.85, "1 Md — lourd sur CPU"),
+    "facebook/wav2vec2-large-xlsr-53-french": (1.26, "315M — modèle d'origine"),
+}
+
+# Architectures entraînables depuis l'onglet Training. Chacune a son script, ses
+# modèles de base et ses hyperparamètres usuels — un CTC de 315M ne se règle pas
+# comme un seq2seq de 1,5B.
+TRAIN_ARCHITECTURES = {
+    "whisper": {
+        "script": "train.py",
+        "models": [
+            "openai/whisper-large-v3",
+            "bofenghuang/whisper-large-v3-french",
+            "openai/whisper-large-v2",
+            "openai/whisper-medium",
+            "openai/whisper-small",
+            "openai/whisper-base",
+        ],
+        "defaults": {"epochs": "3", "batch": "8", "lr": "1e-5"},
+        "convertible": True,
+        "hint": "seq2seq — convertible en CTranslate2",
+    },
+    "wav2vec2": {
+        "script": "train_wav2vec2.py",
+        # Les modèles déjà dotés d'une tête CTC en tête de liste : partir d'eux
+        # conserve leur vocabulaire et converge en quelques époques. Les bases
+        # LeBenchmark n'ont pas de tête CTC — elles demandent un entraînement
+        # bien plus long, mais offrent le meilleur point de départ français.
+        "models": [
+            "jonatasgrosman/wav2vec2-large-xlsr-53-french",
+            "bofenghuang/asr-wav2vec2-ctc-french",
+            "facebook/wav2vec2-large-xlsr-53-french",
+            "jonatasgrosman/wav2vec2-xls-r-1b-french",
+            "LeBenchmark/wav2vec2-FR-7K-large",
+            "LeBenchmark/wav2vec2-FR-14K-xlarge",
+        ],
+        "defaults": {"epochs": "15", "batch": "8", "lr": "1e-4"},
+        "convertible": False,
+        "hint": "CTC — sortie en minuscules, sans ponctuation",
+    },
+    "moonshine": {
+        "script": "train_moonshine.py",
+        "models": [
+            "Cornebidouil/moonshine-tiny-fr",
+            "UsefulSensors/moonshine-base",
+            "UsefulSensors/moonshine-tiny",
+        ],
+        "defaults": {"epochs": "30", "batch": "32", "lr": "1e-4"},
+        "convertible": False,
+        "hint": "edge — seul le tiny existe en français",
+    },
+}
+
 DEFAULTS = {
     "model_size": "large-v3",
     "custom_model_path": "",
@@ -66,9 +127,27 @@ DEFAULTS = {
     "groq_api_key": "",
     "groq_model": "whisper-large-v3-turbo",
     "groq_fallback_local": False,
+    "moonshine_model": "",
+    "moonshine_backend": "torch",
+    "moonshine_device": "auto",
+    "moonshine_fallback_local": False,
+    "wav2vec2_model": "",
+    "wav2vec2_device": "auto",
+    "wav2vec2_fallback_local": False,
+    "wav2vec2_hotwords": False,
+    "wav2vec2_hotword_weight": 10.0,
+    "fastconformer_model": "",
+    "fastconformer_backend": "onnx",
+    "fastconformer_quantization": "int8",
+    "fastconformer_fallback_local": False,
     "install_mode": "full",
     "fuzzy_enabled": True,
     "fuzzy_threshold": 60,
+    "restore_case": True,
+    "restore_case_nouns": True,
+    "restore_case_sentences": True,
+    "restore_case_punctuation": True,
+    "restore_case_style": "title",
     "api_enabled": False,
     "api_host": "0.0.0.0",
     "api_port": 5000,
@@ -157,7 +236,7 @@ def _get_hf_hub_dir() -> str:
 def _get_model_repo(model_name: str) -> str:
     """Retourne le repo HuggingFace pour un modèle faster-whisper."""
     REPO_OVERRIDES = {
-        "large-v3-turbo": "deepdml/faster-whisper-large-v3-turbo",
+        "large-v3-turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
         "distil-large-v2": "Systran/faster-distil-whisper-large-v2",
         "distil-large-v3": "Systran/faster-distil-whisper-large-v3",
     }
@@ -182,6 +261,27 @@ def _get_model_cache_dir(model_name: str) -> str:
     repo_id = _get_model_repo(model_name)
     repo_folder = f"models--{repo_id.replace('/', '--')}"
     return os.path.join(hub_dir, repo_folder)
+
+
+def _hf_repo_cache_dir(repo_id: str) -> str:
+    """Chemin de cache d'un dépôt Hugging Face désigné par son identifiant complet.
+
+    _get_model_cache_dir() ne convient pas ici : elle applique les correspondances
+    propres à Whisper (préfixe Systran/faster-whisper-). Pour « org/modele », le
+    dossier de cache se déduit directement du nom.
+    """
+    return os.path.join(_get_hf_hub_dir(), f"models--{repo_id.replace('/', '--')}")
+
+
+def _is_hf_repo_cached(repo_id: str) -> bool:
+    """Vérifie qu'un dépôt Hugging Face est présent et non vide dans le cache."""
+    snapshots = os.path.join(_hf_repo_cache_dir(repo_id), "snapshots")
+    if not os.path.isdir(snapshots):
+        return False
+    return any(
+        os.path.isdir(os.path.join(snapshots, d)) and os.listdir(os.path.join(snapshots, d))
+        for d in os.listdir(snapshots)
+    )
 
 
 def _is_model_cached(model_name: str) -> bool:
@@ -514,9 +614,42 @@ class ConfigWindow:
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill="both", expand=True, padx=10, pady=(10, 0))
 
-        # --- Onglet Général ---
-        tab_general = ttk.Frame(notebook, padding=15)
-        notebook.add(tab_general, text="Général")
+        # --- Onglet Général (défilable) ---
+        # Cet onglet est le plus chargé : réglages du modèle, du micro, des
+        # raccourcis, puis le bloc du moteur STT sélectionné. Sans défilement,
+        # le bas de l'onglet sort de la fenêtre sur un écran peu haut.
+        general_container = ttk.Frame(notebook)
+        notebook.add(general_container, text="Général")
+
+        general_canvas = tk.Canvas(general_container, highlightthickness=0)
+        general_scroll = ttk.Scrollbar(
+            general_container, orient="vertical", command=general_canvas.yview,
+        )
+        tab_general = ttk.Frame(general_canvas, padding=15)
+
+        general_window = general_canvas.create_window(
+            (0, 0), window=tab_general, anchor="nw",
+        )
+        general_canvas.configure(yscrollcommand=general_scroll.set)
+
+        def _sync_general_scroll(_event=None):
+            """Recalcule la zone défilable et fait suivre la largeur du contenu."""
+            general_canvas.configure(scrollregion=general_canvas.bbox("all"))
+            general_canvas.itemconfigure(general_window, width=general_canvas.winfo_width())
+
+        tab_general.bind("<Configure>", _sync_general_scroll)
+        general_canvas.bind("<Configure>", _sync_general_scroll)
+
+        def _on_general_wheel(event):
+            """Molette : ne défile que si le contenu dépasse réellement."""
+            bbox = general_canvas.bbox("all")
+            if bbox and bbox[3] > general_canvas.winfo_height():
+                general_canvas.yview_scroll(-1 * (event.delta // 120), "units")
+
+        general_canvas.bind_all("<MouseWheel>", _on_general_wheel)
+
+        general_canvas.pack(side="left", fill="both", expand=True)
+        general_scroll.pack(side="right", fill="y")
 
         row = 0
 
@@ -670,7 +803,8 @@ class ConfigWindow:
         ttk.Label(tab_general, text="Moteur STT :").grid(row=row, column=0, sticky="w", pady=6)
         is_groq_only = self.cfg.get("install_mode") == "groq"
         self.engine_var = tk.StringVar(value="groq" if is_groq_only else self.cfg.get("stt_engine", "local"))
-        engine_values = ["groq"] if is_groq_only else ["local", "groq"]
+        engine_values = (["groq"] if is_groq_only
+                         else ["local", "groq", "moonshine", "wav2vec2", "fastconformer"])
         engine_combo = ttk.Combobox(
             tab_general, textvariable=self.engine_var,
             state="disabled" if is_groq_only else "readonly", width=18,
@@ -681,32 +815,149 @@ class ConfigWindow:
         engine_combo.bind("<<ComboboxSelected>>", lambda e: self._toggle_groq_fields())
         row += 1
 
-        # Clé API Groq
-        ttk.Label(tab_general, text="Clé API Groq :").grid(row=row, column=0, sticky="w", pady=4)
-        self.groq_key_var = tk.StringVar(value=self.cfg.get("groq_api_key", ""))
-        self.groq_key_entry = ttk.Entry(tab_general, textvariable=self.groq_key_var, width=40, show="*")
-        self.groq_key_entry.grid(row=row, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
-        row += 1
+        # --- Paramètres du moteur sélectionné ---
+        # Un seul bloc est affiché à la fois : masquer les autres plutôt que les
+        # griser garde l'onglet dans la fenêtre, quel que soit le nombre de
+        # moteurs disponibles.
+        self.engine_frames = {}
 
-        # Modèle Groq
-        ttk.Label(tab_general, text="Modèle Groq :").grid(row=row, column=0, sticky="w", pady=4)
+        def engine_frame(name):
+            """Crée le conteneur d'un moteur, tous sur la même ligne de grille."""
+            f = ttk.Frame(tab_general)
+            f.grid(row=row, column=0, columnspan=3, sticky="ew")
+            self.engine_frames[name] = f
+            return f
+
+        # --- Groq ---
+        fg = engine_frame("groq")
+        ttk.Label(fg, text="Clé API Groq :").grid(row=0, column=0, sticky="w", pady=4)
+        self.groq_key_var = tk.StringVar(value=self.cfg.get("groq_api_key", ""))
+        self.groq_key_entry = ttk.Entry(fg, textvariable=self.groq_key_var, width=40, show="*")
+        self.groq_key_entry.grid(row=0, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
+
+        ttk.Label(fg, text="Modèle Groq :").grid(row=1, column=0, sticky="w", pady=4)
         self.groq_model_var = tk.StringVar(value=self.cfg.get("groq_model", "whisper-large-v3-turbo"))
         self.groq_model_combo = ttk.Combobox(
-            tab_general, textvariable=self.groq_model_var, state="readonly", width=24,
+            fg, textvariable=self.groq_model_var, state="readonly", width=24,
             values=["whisper-large-v3-turbo", "whisper-large-v3", "distil-whisper-large-v3-en"],
         )
-        self.groq_model_combo.grid(row=row, column=1, sticky="w", pady=4, padx=(10, 0))
-        row += 1
+        self.groq_model_combo.grid(row=1, column=1, sticky="w", pady=4, padx=(10, 0))
 
-        # Fallback local
         self.groq_fallback_var = tk.BooleanVar(value=self.cfg.get("groq_fallback_local", False))
         self.groq_fallback_check = ttk.Checkbutton(
-            tab_general, text="Charger le modèle local en fallback (démarrage plus lent)",
+            fg, text="Charger le modèle local en fallback (démarrage plus lent)",
             variable=self.groq_fallback_var,
         )
-        self.groq_fallback_check.grid(row=row, column=0, columnspan=3, sticky="w", pady=(2, 4))
+        self.groq_fallback_check.grid(row=2, column=0, columnspan=3, sticky="w", pady=(2, 4))
+
+        # --- Moonshine ---
+        fm = engine_frame("moonshine")
+        ttk.Label(fm, text="Modèle Moonshine :").grid(row=0, column=0, sticky="w", pady=4)
+        self.moonshine_model_var = tk.StringVar(value=self.cfg.get("moonshine_model", ""))
+        self.moonshine_model_entry = ttk.Entry(fm, textvariable=self.moonshine_model_var, width=40)
+        self.moonshine_model_entry.grid(row=0, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
+        ttk.Label(fm, text="Vide = Cornebidouil/moonshine-tiny-fr. Sinon : chemin du modèle fine-tuné.",
+                  foreground="gray").grid(row=1, column=1, columnspan=2, sticky="w", padx=(10, 0))
+
+        ttk.Label(fm, text="Backend :").grid(row=2, column=0, sticky="w", pady=4)
+        self.moonshine_backend_var = tk.StringVar(value=self.cfg.get("moonshine_backend", "torch"))
+        self.moonshine_backend_combo = ttk.Combobox(
+            fm, textvariable=self.moonshine_backend_var, state="readonly", width=18,
+            values=["torch", "onnx"],
+        )
+        self.moonshine_backend_combo.grid(row=2, column=1, sticky="w", pady=4, padx=(10, 0))
+
+        self.moonshine_fallback_var = tk.BooleanVar(value=self.cfg.get("moonshine_fallback_local", False))
+        self.moonshine_fallback_check = ttk.Checkbutton(
+            fm, text="Charger Whisper en fallback (démarrage plus lent)",
+            variable=self.moonshine_fallback_var,
+        )
+        self.moonshine_fallback_check.grid(row=3, column=0, columnspan=3, sticky="w", pady=(2, 4))
+
+        # --- wav2vec2 ---
+        fw = engine_frame("wav2vec2")
+        ttk.Label(fw, text="Modèle wav2vec2 :").grid(row=0, column=0, sticky="w", pady=4)
+        self.wav2vec2_model_var = tk.StringVar(value=self.cfg.get("wav2vec2_model", ""))
+        # Combobox éditable : la liste sert de raccourci, mais tout identifiant
+        # Hugging Face ou chemin local reste saisissable.
+        self.wav2vec2_model_entry = ttk.Combobox(
+            fw, textvariable=self.wav2vec2_model_var, width=44,
+            values=[""] + list(WAV2VEC2_MODELS),
+        )
+        self.wav2vec2_model_entry.grid(row=0, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
+        self.wav2vec2_model_entry.bind(
+            "<<ComboboxSelected>>", lambda e: self._update_wav2vec2_status()
+        )
+        self.wav2vec2_model_var.trace_add(
+            "write", lambda *a: self._update_wav2vec2_status()
+        )
+
+        status_row = ttk.Frame(fw)
+        status_row.grid(row=1, column=1, columnspan=2, sticky="w", padx=(10, 0))
+        self.wav2vec2_status_label = tk.Label(
+            status_row, text="", font=("Segoe UI", 8), anchor="w",
+        )
+        self.wav2vec2_status_label.pack(side="left")
+        self.wav2vec2_dl_btn = tk.Button(
+            status_row, text="Télécharger", command=self._download_wav2vec2,
+            bg=VOCABASE_PURPLE, fg="white", font=("Segoe UI", 8),
+            relief="flat", padx=6, cursor="hand2",
+            activebackground=VOCABASE_PURPLE, activeforeground="white",
+        )
+
+        # Hotwords : boosting des noms de l'annuaire au décodage.
+        self.wav2vec2_hotwords_var = tk.BooleanVar(value=self.cfg.get("wav2vec2_hotwords", False))
+        ttk.Checkbutton(
+            fw, text="Favoriser les noms propres au décodage (onglet « Noms propres »)",
+            variable=self.wav2vec2_hotwords_var,
+        ).grid(row=2, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        ttk.Label(fw, text="+27 points sur les noms propres, mais ~300 ms de plus par phrase.",
+                  foreground="gray").grid(row=3, column=0, columnspan=3, sticky="w", padx=(20, 0))
+
+        ttk.Label(fw, text="Poids :").grid(row=4, column=0, sticky="w", pady=4)
+        self.wav2vec2_hotword_weight_var = tk.StringVar(
+            value=str(self.cfg.get("wav2vec2_hotword_weight", 10.0))
+        )
+        ttk.Entry(fw, textvariable=self.wav2vec2_hotword_weight_var, width=6).grid(
+            row=4, column=1, sticky="w", pady=4, padx=(10, 0))
+        ttk.Label(fw, text="10 mesuré optimal ; au-delà, le décodeur force des noms à tort.",
+                  foreground="gray").grid(row=5, column=0, columnspan=3, sticky="w", padx=(20, 0))
+
+        self.wav2vec2_fallback_var = tk.BooleanVar(value=self.cfg.get("wav2vec2_fallback_local", False))
+        self.wav2vec2_fallback_check = ttk.Checkbutton(
+            fw, text="Charger Whisper en fallback (démarrage plus lent)",
+            variable=self.wav2vec2_fallback_var,
+        )
+        self.wav2vec2_fallback_check.grid(row=6, column=0, columnspan=3, sticky="w", pady=(6, 4))
+
+        # --- FastConformer ---
+        ff = engine_frame("fastconformer")
+        ttk.Label(ff, text="Modèle FastConformer :").grid(row=0, column=0, sticky="w", pady=4)
+        self.fc_model_var = tk.StringVar(value=self.cfg.get("fastconformer_model", ""))
+        self.fc_model_entry = ttk.Entry(ff, textvariable=self.fc_model_var, width=40)
+        self.fc_model_entry.grid(row=0, column=1, columnspan=2, sticky="w", pady=4, padx=(10, 0))
+        ttk.Label(ff, text="Vide = OpenVoiceOS (ONNX). LinTO : linagora/linto_stt_fr_fastconformer + backend nemo.",
+                  foreground="gray").grid(row=1, column=1, columnspan=2, sticky="w", padx=(10, 0))
+
+        ttk.Label(ff, text="Backend :").grid(row=2, column=0, sticky="w", pady=4)
+        self.fc_backend_var = tk.StringVar(value=self.cfg.get("fastconformer_backend", "onnx"))
+        self.fc_backend_combo = ttk.Combobox(
+            ff, textvariable=self.fc_backend_var, state="readonly", width=18,
+            values=["onnx", "nemo"],
+        )
+        self.fc_backend_combo.grid(row=2, column=1, sticky="w", pady=4, padx=(10, 0))
+
+        self.fc_fallback_var = tk.BooleanVar(value=self.cfg.get("fastconformer_fallback_local", False))
+        self.fc_fallback_check = ttk.Checkbutton(
+            ff, text="Charger Whisper en fallback (démarrage plus lent)",
+            variable=self.fc_fallback_var,
+        )
+        self.fc_fallback_check.grid(row=3, column=0, columnspan=3, sticky="w", pady=(2, 4))
+
+        # "local" n'a pas de bloc : ses réglages sont ceux du haut de l'onglet.
         row += 1
 
+        self._update_wav2vec2_status()
         self._toggle_groq_fields()
 
         ttk.Separator(tab_general).grid(row=row, column=0, columnspan=3, sticky="ew", pady=(6, 10))
@@ -832,6 +1083,58 @@ class ConfigWindow:
         fuzzy_spin.pack(side="left")
         ttk.Label(noms_header, text="/ 100", foreground="gray").pack(side="left", padx=(2, 0))
 
+        # --- Remise en forme (utile pour wav2vec2 et LinTO, qui n'en produisent pas) ---
+        case_frame = ttk.LabelFrame(tab_noms, text="  Remise en forme  ", padding=6)
+        case_frame.pack(fill="x", pady=(6, 8))
+
+        self.restore_case_var = tk.BooleanVar(value=self.cfg.get("restore_case", True))
+        ttk.Checkbutton(
+            case_frame, text="Restaurer la casse et la ponctuation",
+            variable=self.restore_case_var,
+            command=lambda: self._toggle_case_fields(),
+        ).grid(row=0, column=0, columnspan=3, sticky="w")
+
+        ttk.Label(
+            case_frame,
+            text="Les moteurs wav2vec2 et LinTO transcrivent en minuscules, sans ponctuation.",
+            foreground="gray",
+        ).grid(row=1, column=0, columnspan=3, sticky="w", padx=(20, 0))
+
+        self.case_nouns_var = tk.BooleanVar(value=self.cfg.get("restore_case_nouns", True))
+        self.case_nouns_check = ttk.Checkbutton(
+            case_frame, text="Noms de la liste ci-dessous", variable=self.case_nouns_var,
+        )
+        self.case_nouns_check.grid(row=2, column=0, sticky="w", padx=(20, 0), pady=(4, 0))
+
+        self.case_sentences_var = tk.BooleanVar(value=self.cfg.get("restore_case_sentences", True))
+        self.case_sentences_check = ttk.Checkbutton(
+            case_frame, text="Majuscule en début de phrase", variable=self.case_sentences_var,
+        )
+        self.case_sentences_check.grid(row=2, column=1, sticky="w", padx=(10, 0), pady=(4, 0))
+
+        self.case_punct_var = tk.BooleanVar(value=self.cfg.get("restore_case_punctuation", True))
+        self.case_punct_check = ttk.Checkbutton(
+            case_frame, text="Point final", variable=self.case_punct_var,
+        )
+        self.case_punct_check.grid(row=2, column=2, sticky="w", padx=(10, 0), pady=(4, 0))
+
+        style_row = ttk.Frame(case_frame)
+        style_row.grid(row=3, column=0, columnspan=3, sticky="w", padx=(20, 0), pady=(6, 0))
+        ttk.Label(style_row, text="Casse des noms :").pack(side="left")
+        self.case_style_var = tk.StringVar(value=self.cfg.get("restore_case_style", "title"))
+        self.case_style_combo = ttk.Combobox(
+            style_row, textvariable=self.case_style_var, state="readonly", width=10,
+            values=["title", "upper", "asis"],
+        )
+        self.case_style_combo.pack(side="left", padx=(6, 0))
+        ttk.Label(
+            style_row,
+            text="title = Brisbois  ·  upper = BRISBOIS  ·  asis = comme la liste",
+            foreground="gray",
+        ).pack(side="left", padx=(10, 0))
+
+        self._toggle_case_fields()
+
         ttk.Label(tab_noms, text="Un nom propre par ligne (noms composes acceptes, # = commentaire) :").pack(anchor="w")
 
         noms_frame = ttk.Frame(tab_noms)
@@ -947,18 +1250,32 @@ class ConfigWindow:
         sec_train = ttk.LabelFrame(parent, text="  2. Entraînement  ", padding=8)
         sec_train.pack(fill="x", pady=(0, 6))
 
+        # Ligne 0 : Architecture — commande le script lancé et les modèles proposés
+        row_arch = ttk.Frame(sec_train)
+        row_arch.pack(fill="x", pady=2)
+        ttk.Label(row_arch, text="Architecture :", width=14).pack(side="left")
+        self.train_arch_var = tk.StringVar(value="whisper")
+        arch_combo = ttk.Combobox(
+            row_arch, textvariable=self.train_arch_var, state="readonly", width=16,
+            values=list(TRAIN_ARCHITECTURES),
+        )
+        arch_combo.pack(side="left", padx=(4, 0))
+        self.train_arch_hint = ttk.Label(row_arch, text="", foreground="gray")
+        self.train_arch_hint.pack(side="left", padx=(10, 0))
+        arch_combo.bind("<<ComboboxSelected>>", lambda e: self._on_train_arch_change())
+
         # Ligne 1 : Modèle de base
         row_base = ttk.Frame(sec_train)
         row_base.pack(fill="x", pady=2)
         ttk.Label(row_base, text="Modèle de base :", width=14).pack(side="left")
-        self.train_base_model_var = tk.StringVar(value="openai/whisper-large-v3")
-        base_combo = ttk.Combobox(row_base, textvariable=self.train_base_model_var, width=38, values=[
-            "openai/whisper-large-v3",
-            "bofenghuang/whisper-large-v3-french",
-            "openai/whisper-large-v2",
-            "openai/whisper-medium",
-        ])
-        base_combo.pack(side="left", padx=(4, 0))
+        self.train_base_model_var = tk.StringVar(
+            value=TRAIN_ARCHITECTURES["whisper"]["models"][0]
+        )
+        self.train_base_combo = ttk.Combobox(
+            row_base, textvariable=self.train_base_model_var, width=38,
+            values=TRAIN_ARCHITECTURES["whisper"]["models"],
+        )
+        self.train_base_combo.pack(side="left", padx=(4, 0))
 
         # Ligne 2 : Époques, Batch, LR
         row_params = ttk.Frame(sec_train)
@@ -984,7 +1301,10 @@ class ConfigWindow:
         ).pack(side="right")
 
         # --- Section 3 : Conversion CTranslate2 ---
-        sec_convert = ttk.LabelFrame(parent, text="  3. Conversion CTranslate2  ", padding=8)
+        # Ne concerne que Whisper : CTranslate2 ne sait pas convertir un CTC ni
+        # un Moonshine. La section est masquée pour les autres architectures.
+        self.sec_convert = ttk.LabelFrame(parent, text="  3. Conversion CTranslate2  ", padding=8)
+        sec_convert = self.sec_convert
         sec_convert.pack(fill="x", pady=(0, 6))
 
         row_conv = ttk.Frame(sec_convert)
@@ -1018,6 +1338,11 @@ class ConfigWindow:
         )
         self.train_log.pack(fill="both", expand=True)
         log_scroll.config(command=self.train_log.yview)
+
+        # Appliquer l'architecture initiale (renseigne l'indication et
+        # affiche ou masque la section CTranslate2). Appelé ici, car cette
+        # section doit déjà exister.
+        self._on_train_arch_change()
 
         # Bouton Arrêter (caché par défaut)
         self._stop_frame = ttk.Frame(log_frame)
@@ -1153,6 +1478,108 @@ class ConfigWindow:
         ]
         self._run_subprocess(cmd, "Préparation du dataset")
 
+    def _toggle_case_fields(self):
+        """Active les options fines seulement si la remise en forme est activée."""
+        state = "normal" if self.restore_case_var.get() else "disabled"
+        for check in (self.case_nouns_check, self.case_sentences_check,
+                      self.case_punct_check):
+            check.config(state=state)
+        self.case_style_combo.config(state="readonly" if state == "normal" else "disabled")
+
+    def _update_wav2vec2_status(self):
+        """Indique si le modèle wav2vec2 est en local, et propose son téléchargement."""
+        # La variable est tracée dès sa création, donc avant que le bouton
+        # existe : ignorer les appels trop précoces.
+        if not hasattr(self, "wav2vec2_dl_btn"):
+            return
+
+        model = self.wav2vec2_model_var.get().strip() or list(WAV2VEC2_MODELS)[0]
+
+        # Un chemin local (modèle fine-tuné) est par définition déjà présent
+        if os.path.isdir(model) or os.path.isdir(os.path.join(BASE_DIR, model)):
+            self.wav2vec2_status_label.config(
+                text="  ✅  Modèle local", fg=VOCABASE_GREEN,
+            )
+            self.wav2vec2_dl_btn.pack_forget()
+            return
+
+        size = (_get_dir_size_gb(_hf_repo_cache_dir(model))
+                if _is_hf_repo_cached(model) else 0.0)
+
+        # Un dossier de cache peut exister sans les poids : un téléchargement
+        # interrompu n'y laisse que les fichiers de configuration. Sous ce
+        # seuil, le modèle est présent mais inutilisable.
+        if 0 < size < 0.05:
+            self.wav2vec2_status_label.config(
+                text=f"  ⚠  Téléchargement incomplet ({size * 1000:.0f} Mo)",
+                fg=VOCABASE_RED,
+            )
+            self.wav2vec2_dl_btn.pack(side="left", padx=(8, 0))
+        elif size:
+            self.wav2vec2_status_label.config(
+                text=f"  ✅  En local ({size:.2f} Go)", fg=VOCABASE_GREEN,
+            )
+            self.wav2vec2_dl_btn.pack_forget()
+        else:
+            expected = WAV2VEC2_MODELS.get(model, (0, ""))[0]
+            suffix = f" (~{expected:.1f} Go)" if expected else ""
+            self.wav2vec2_status_label.config(
+                text=f"  ⬇  À télécharger{suffix}", fg=VOCABASE_RED,
+            )
+            self.wav2vec2_dl_btn.pack(side="left", padx=(8, 0))
+
+    def _download_wav2vec2(self):
+        """Télécharge le modèle wav2vec2 sélectionné dans le cache Hugging Face."""
+        model = self.wav2vec2_model_var.get().strip() or list(WAV2VEC2_MODELS)[0]
+        expected = WAV2VEC2_MODELS.get(model, (0, ""))[0]
+
+        from tkinter import messagebox
+        if not messagebox.askyesno(
+            "Téléchargement",
+            f"Télécharger {model} ?\n\n"
+            f"Taille approximative : {expected:.1f} Go\n\n"
+            "Le téléchargement s'affiche dans le journal de l'onglet Training.",
+        ):
+            return
+
+        # allow_patterns écarte les poids TensorFlow/Flax et le modèle de langage
+        # n-gram : inutiles ici, et parfois plus volumineux que le modèle lui-même.
+        code = (
+            "from huggingface_hub import snapshot_download; "
+            f"p = snapshot_download({model!r}, allow_patterns="
+            "['*.json','*.txt','*.safetensors','*.bin','*.model']); "
+            "print('Modele telecharge dans :', p)"
+        )
+        self._run_subprocess([sys.executable, "-c", code], f"Téléchargement {model}")
+
+    def _on_train_arch_change(self):
+        """Adapte les modèles proposés et les hyperparamètres à l'architecture.
+
+        Les valeurs par défaut diffèrent fortement d'une famille à l'autre : un
+        CTC de 315M se fine-tune à 1e-4 sur une quinzaine d'époques, là où un
+        Whisper de 1,5B demande 1e-5 sur trois. Proposer les mêmes réglages
+        partout mènerait à des entraînements dégénérés.
+        """
+        arch = self.train_arch_var.get()
+        spec = TRAIN_ARCHITECTURES.get(arch)
+        if not spec:
+            return
+
+        self.train_base_combo.config(values=spec["models"])
+        self.train_base_model_var.set(spec["models"][0])
+
+        self.train_epochs_var.set(spec["defaults"]["epochs"])
+        self.train_batch_var.set(spec["defaults"]["batch"])
+        self.train_lr_var.set(spec["defaults"]["lr"])
+
+        self.train_arch_hint.config(text=spec["hint"])
+
+        # CTranslate2 ne convertit que Whisper
+        if spec["convertible"]:
+            self.sec_convert.pack(fill="x", pady=(0, 6))
+        else:
+            self.sec_convert.pack_forget()
+
     def _run_train(self):
         """Lance l'entraînement après vérification GPU."""
         python = sys.executable
@@ -1178,7 +1605,18 @@ class ConfigWindow:
             )
             return
 
-        script = os.path.join(BASE_DIR, "fine_tuning", "train.py")
+        arch = self.train_arch_var.get()
+        spec = TRAIN_ARCHITECTURES.get(arch, TRAIN_ARCHITECTURES["whisper"])
+
+        script = os.path.join(BASE_DIR, "fine_tuning", spec["script"])
+        if not os.path.isfile(script):
+            from tkinter import messagebox
+            messagebox.showerror(
+                "Script introuvable",
+                f"Le script d'entraînement est absent :\n{script}",
+            )
+            return
+
         cmd = [
             python, script,
             "--base_model", self.train_base_model_var.get(),
@@ -1186,7 +1624,7 @@ class ConfigWindow:
             "--batch_size", self.train_batch_var.get(),
             "--learning_rate", self.train_lr_var.get(),
         ]
-        self._run_subprocess(cmd, "Fine-tuning Whisper")
+        self._run_subprocess(cmd, f"Fine-tuning {arch}")
 
     def _run_convert(self):
         """Lance la conversion CTranslate2."""
@@ -1246,22 +1684,26 @@ class ConfigWindow:
             )
 
     def _toggle_groq_fields(self):
-        """Active/désactive les champs Groq et modèle local selon le moteur et le mode d'installation."""
-        is_groq = self.engine_var.get() == "groq"
+        """N'affiche que le bloc du moteur sélectionné et ajuste le mode groq-only."""
+        engine = self.engine_var.get()
         is_groq_only = self.cfg.get("install_mode") == "groq"
 
-        # Champs Groq
-        state = "normal" if is_groq else "disabled"
-        readonly = "readonly" if is_groq else "disabled"
-        self.groq_key_entry.config(state=state)
-        self.groq_model_combo.config(state=readonly)
+        # Un seul bloc visible : les autres sont retirés de la grille, pas
+        # seulement grisés, pour que l'onglet tienne dans la fenêtre.
+        for name, frame in self.engine_frames.items():
+            if name == engine:
+                frame.grid()
+            else:
+                frame.grid_remove()
 
-        # Fallback : désactivé si groq-only (pas de modèle local installé)
+        # En mode groq-only, aucun modèle local n'est installé : pas de fallback.
         if is_groq_only:
-            self.groq_fallback_var.set(False)
-            self.groq_fallback_check.config(state="disabled")
-        else:
-            self.groq_fallback_check.config(state=state)
+            for var in (self.groq_fallback_var, self.moonshine_fallback_var,
+                        self.wav2vec2_fallback_var, self.fc_fallback_var):
+                var.set(False)
+            for check in (self.groq_fallback_check, self.moonshine_fallback_check,
+                          self.wav2vec2_fallback_check, self.fc_fallback_check):
+                check.config(state="disabled")
 
         # Widgets modèle local : désactivés en mode groq-only
         if is_groq_only:
@@ -1385,6 +1827,15 @@ class ConfigWindow:
                 or self.hotkey2_var.get() != self.cfg.get("hotkey_secondary", "Ctrl+Shift+D")
                 or self.engine_var.get() != self.cfg.get("stt_engine", "local")
                 or self.groq_fallback_var.get() != self.cfg.get("groq_fallback_local", False)
+                or self.moonshine_model_var.get().strip() != self.cfg.get("moonshine_model", "")
+                or self.moonshine_backend_var.get() != self.cfg.get("moonshine_backend", "torch")
+                or self.moonshine_fallback_var.get() != self.cfg.get("moonshine_fallback_local", False)
+                or self.wav2vec2_model_var.get().strip() != self.cfg.get("wav2vec2_model", "")
+                or self.wav2vec2_fallback_var.get() != self.cfg.get("wav2vec2_fallback_local", False)
+                or self.wav2vec2_hotwords_var.get() != self.cfg.get("wav2vec2_hotwords", False)
+                or self.fc_model_var.get().strip() != self.cfg.get("fastconformer_model", "")
+                or self.fc_backend_var.get() != self.cfg.get("fastconformer_backend", "onnx")
+                or self.fc_fallback_var.get() != self.cfg.get("fastconformer_fallback_local", False)
                 or self.api_enabled_var.get() != self.cfg.get("api_enabled", False)
                 or self.api_host_var.get().strip() != self.cfg.get("api_host", "0.0.0.0")
                 or int(self.api_port_var.get()) != self.cfg.get("api_port", 5000)
@@ -1413,8 +1864,23 @@ class ConfigWindow:
                 "groq_api_key": self.groq_key_var.get().strip(),
                 "groq_model": self.groq_model_var.get(),
                 "groq_fallback_local": self.groq_fallback_var.get(),
+                "moonshine_model": self.moonshine_model_var.get().strip(),
+                "moonshine_backend": self.moonshine_backend_var.get(),
+                "moonshine_fallback_local": self.moonshine_fallback_var.get(),
+                "wav2vec2_model": self.wav2vec2_model_var.get().strip(),
+                "wav2vec2_fallback_local": self.wav2vec2_fallback_var.get(),
+                "wav2vec2_hotwords": self.wav2vec2_hotwords_var.get(),
+                "wav2vec2_hotword_weight": float(self.wav2vec2_hotword_weight_var.get() or 10.0),
+                "fastconformer_model": self.fc_model_var.get().strip(),
+                "fastconformer_backend": self.fc_backend_var.get(),
+                "fastconformer_fallback_local": self.fc_fallback_var.get(),
                 "fuzzy_enabled": self.fuzzy_enabled_var.get(),
                 "fuzzy_threshold": self.fuzzy_threshold_var.get(),
+                "restore_case": self.restore_case_var.get(),
+                "restore_case_nouns": self.case_nouns_var.get(),
+                "restore_case_sentences": self.case_sentences_var.get(),
+                "restore_case_punctuation": self.case_punct_var.get(),
+                "restore_case_style": self.case_style_var.get(),
                 "api_enabled": self.api_enabled_var.get(),
                 "api_host": self.api_host_var.get().strip(),
                 "api_port": int(self.api_port_var.get()),
@@ -1484,8 +1950,23 @@ class ConfigWindow:
                 "groq_api_key": self.groq_key_var.get().strip(),
                 "groq_model": self.groq_model_var.get(),
                 "groq_fallback_local": self.groq_fallback_var.get(),
+                "moonshine_model": self.moonshine_model_var.get().strip(),
+                "moonshine_backend": self.moonshine_backend_var.get(),
+                "moonshine_fallback_local": self.moonshine_fallback_var.get(),
+                "wav2vec2_model": self.wav2vec2_model_var.get().strip(),
+                "wav2vec2_fallback_local": self.wav2vec2_fallback_var.get(),
+                "wav2vec2_hotwords": self.wav2vec2_hotwords_var.get(),
+                "wav2vec2_hotword_weight": float(self.wav2vec2_hotword_weight_var.get() or 10.0),
+                "fastconformer_model": self.fc_model_var.get().strip(),
+                "fastconformer_backend": self.fc_backend_var.get(),
+                "fastconformer_fallback_local": self.fc_fallback_var.get(),
                 "fuzzy_enabled": self.fuzzy_enabled_var.get(),
                 "fuzzy_threshold": self.fuzzy_threshold_var.get(),
+                "restore_case": self.restore_case_var.get(),
+                "restore_case_nouns": self.case_nouns_var.get(),
+                "restore_case_sentences": self.case_sentences_var.get(),
+                "restore_case_punctuation": self.case_punct_var.get(),
+                "restore_case_style": self.case_style_var.get(),
                 "api_enabled": self.api_enabled_var.get(),
                 "api_host": self.api_host_var.get().strip(),
                 "api_port": int(self.api_port_var.get()),

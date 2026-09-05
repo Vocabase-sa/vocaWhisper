@@ -1,7 +1,9 @@
 """Serveur Flask pour l'API HTTP de transcription VocaWhisper."""
 
 import logging
+import queue
 import threading
+import time
 
 from flask import Flask, request, jsonify
 
@@ -16,6 +18,53 @@ _transcribe_fn = None
 _server_thread = None
 _rtp_initialized = False
 
+# --- Suivi de l'inférence, pour que /health teste le chemin réel ---
+_meta_lock = threading.Lock()
+_inflight_since = None   # timestamp de début de l'inférence en cours
+_last_ok = None          # timestamp de la dernière transcription réussie
+_started_at = time.time()
+
+# Au-delà, on considère le moteur bloqué (boucle de répétition Whisper).
+STUCK_AFTER_S = 180
+# Au-delà, on refuse la requête plutôt que d'attendre indéfiniment le verrou.
+LOCK_TIMEOUT_S = 120
+
+# --- Worker d'inférence : UN SEUL thread pour toutes les transcriptions ---
+# Werkzeug traite chaque requête dans un thread neuf, et CTranslate2/CUDA
+# attachent au thread appelant des ressources (contexte, handles cuBLAS,
+# workspaces) que la mort du thread Python ne libère pas. Mesuré : +24 % de RTF
+# par millier de requêtes en thread neuf, contre -0,2 % en thread unique.
+# En routant toutes les inférences vers un thread stable, l'accumulation cesse.
+_infer_queue = queue.Queue(maxsize=32)
+_worker_thread = None
+
+
+def _inference_worker():
+    """Exécute toutes les inférences dans un thread unique et stable."""
+    global _inflight_since, _last_ok
+    while True:
+        job = _infer_queue.get()
+        if job is None:
+            break
+        audio, box, done = job
+        # Le client a renoncé (timeout HTTP) : ne pas gaspiller le GPU.
+        if box.get("abandoned"):
+            done.set()
+            continue
+        try:
+            with _state.lock:          # cohérence avec la dictée micro
+                with _meta_lock:
+                    _inflight_since = time.time()
+                box["text"] = _transcribe_fn(audio)
+                with _meta_lock:
+                    _last_ok = time.time()
+        except Exception as e:
+            box["error"] = e
+        finally:
+            with _meta_lock:
+                _inflight_since = None
+            done.set()
+
 
 def _create_app():
     """Crée et configure l'application Flask."""
@@ -29,12 +78,26 @@ def _create_app():
             model_ready = bool(_config.get("groq_api_key", "").strip())
         else:
             model_ready = _state is not None and _state.model is not None
+        now = time.time()
+        with _meta_lock:
+            started, last_ok = _inflight_since, _last_ok
+
+        # Une inférence qui dure au-delà du seuil = moteur parti en boucle.
+        # C'est ce cas qui a laissé l'API répondre « ok » pendant 10 h alors
+        # qu'aucune transcription n'aboutissait (incident 2026-09-04 21:47 UTC).
+        busy_for = (now - started) if started else 0.0
+        stuck = busy_for > STUCK_AFTER_S
+        healthy = model_ready and not stuck
+
         return jsonify({
-            "status": "ok",
+            "status": "stuck" if stuck else ("ok" if model_ready else "loading"),
             "model_loaded": model_ready,
             "stt_engine": engine,
             "language": _config.get("language", "fr") if _config else None,
-        })
+            "inference_busy_s": round(busy_for, 1),
+            "last_success_age_s": round(now - last_ok, 1) if last_ok else None,
+            "uptime_s": round(now - _started_at, 1),
+        }), (200 if healthy else 503)
 
     @app.route("/transcribe", methods=["POST"])
     def transcribe_endpoint():
@@ -64,13 +127,29 @@ def _create_app():
             logger.exception("Erreur traitement audio")
             return jsonify({"error": f"Erreur traitement audio : {e}"}), 400
 
-        # Transcrire (avec lock, le modèle n'est pas thread-safe)
+        # Soumettre au thread d'inférence unique. La file remplace le verrou :
+        # elle sérialise naturellement, et surtout l'inférence s'exécute toujours
+        # dans le même thread (voir _inference_worker).
+        box, done = {}, threading.Event()
         try:
-            with _state.lock:
-                text = _transcribe_fn(audio)
-        except Exception as e:
-            logger.exception("Erreur de transcription")
-            return jsonify({"error": f"Erreur de transcription : {e}"}), 500
+            _infer_queue.put_nowait((audio, box, done))
+        except queue.Full:
+            logger.error("File d'inférence saturée (%d en attente)", _infer_queue.maxsize)
+            return jsonify({"error": "File d'inférence saturée, réessayez plus tard."}), 503
+
+        if not done.wait(timeout=LOCK_TIMEOUT_S):
+            # Marquer abandonné : si le worker n'a pas encore pris ce job, il
+            # le sautera au lieu de calculer un résultat que personne n'attend.
+            box["abandoned"] = True
+            logger.error("Inférence non terminée après %ss", LOCK_TIMEOUT_S)
+            return jsonify({
+                "error": "Moteur de transcription occupé, réessayez plus tard."
+            }), 503
+
+        if "error" in box:
+            logger.error("Erreur de transcription : %s", box["error"])
+            return jsonify({"error": f"Erreur de transcription : {box['error']}"}), 500
+        text = box["text"]
 
         return jsonify({
             "text": text,
@@ -102,6 +181,14 @@ def start_api_server(state, config, transcribe_fn):
     port = config.get("api_port", 5000)
 
     app = _create_app()
+
+    # --- Thread d'inférence unique (évite l'accumulation de ressources CUDA) ---
+    global _worker_thread
+    if _worker_thread is None:
+        _worker_thread = threading.Thread(target=_inference_worker,
+                                          name="inference-worker", daemon=True)
+        _worker_thread.start()
+        logger.info("Thread d'inférence unique démarré.")
 
     # --- Initialiser et enregistrer le module RTP si activé ---
     _init_rtp_module(app, config)

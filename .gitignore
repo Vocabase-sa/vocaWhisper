@@ -197,6 +197,9 @@ fine_tuning/data/audio/
 # Output fine-tuning (checkpoints, modele final, runs)
 fine_tuning/output/
 
+# Output fine-tuning Moonshine (checkpoints, modele final, export ONNX)
+fine_tuning/output_moonshine/
+
 # Modele CTranslate2 converti
 fine_tuning/model_ct2/
 
@@ -213,3 +216,23 @@ vocabulaire.txt
 # Mais garder les templates
 !templates/corrections.txt
 !templates/vocabulaire.txt
+
+# =============================================================================
+# Donnees hospitalieres et de production -- NE JAMAIS VERSIONNER
+# Ces fichiers contiennent des transcriptions d'appels patients, des noms de
+# personnes et des extraits de base de production (RGPD / secret medical).
+# =============================================================================
+fine_tuning/hospital_data_export.csv
+fine_tuning/data/transcriptions.csv
+fine_tuning/data/transcriptions.csv.old
+sql/02_update_data.sql
+sql/export_to_prod.py
+
+# Sorties de fine-tuning (checkpoints et modeles, plusieurs Go)
+fine_tuning/output_*/
+fine_tuning/model_ct2_*/
+
+# Sauvegardes locales
+*.bak
+*.bak2
+nul

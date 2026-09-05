@@ -188,10 +188,14 @@ Ou utilisez les parametres via l'icone system tray (clic droit > Parametres).
 | `microphone` | Nom du micro | `""` (defaut systeme) ou nom du peripherique |
 | `hotkey_primary` | Raccourci principal | `Ctrl+Space`, `Ctrl+²`, `Ctrl+F1`-`F5`, etc. |
 | `hotkey_secondary` | Raccourci secondaire | Memes valeurs ou `Aucun` |
-| `stt_engine` | Moteur de transcription | `local` (faster-whisper) ou `groq` (cloud) |
+| `stt_engine` | Moteur de transcription | `local` (faster-whisper), `groq` (cloud) ou `moonshine` (edge, faible latence) |
 | `groq_api_key` | Cle API Groq | Cle obtenue sur [console.groq.com](https://console.groq.com) |
 | `groq_model` | Modele Groq | `whisper-large-v3`, `whisper-large-v3-turbo` |
 | `groq_fallback_local` | Fallback sur le modele local | `true` / `false` — si Groq echoue, utilise le modele local |
+| `moonshine_model` | Modele Moonshine | `""` (defaut: `Cornebidouil/moonshine-tiny-fr`) ou chemin d'un modele fine-tune |
+| `moonshine_backend` | Backend d'inference | `torch` (defaut) ou `onnx` (CPU rapide, necessite `optimum`) |
+| `moonshine_device` | Peripherique Moonshine | `auto` (defaut), `cuda`, `mps`, `cpu` |
+| `moonshine_fallback_local` | Fallback sur Whisper | `true` / `false` |
 | `fuzzy_enabled` | Correction fuzzy des noms propres | `true` / `false` |
 | `fuzzy_threshold` | Seuil de similarite fuzzy | `0`-`100` (defaut: `60`) |
 | `api_enabled` | Activer l'API HTTP | `true` / `false` |

@@ -9,7 +9,15 @@
 #usual 
 impatient -> un patient
 iFraud -> iphone
-
+RTP NG -> RtpEngine
+Cloujit up -> Github
+vocabins -> Vocabase
+VKBase -> Vocabase
+STTAPI -> stt-api
+OrgID -> org_id
+GSON -> JSON
+SPARTA6 -> SMARTASSIST
+SMART TEST 6 -> SMARTASSIST
 
 # --- VoIP ---
 au cercle -> OCM
@@ -148,3 +156,5 @@ Post-graisse QL -> PostgreSQL
 post-graisse -> PostgreSQL
 mon SQL -> MySQL
 gîte -> Git
+ELSPREPROD -> health-preprod
+ELSPRIPOT -> health-preprod

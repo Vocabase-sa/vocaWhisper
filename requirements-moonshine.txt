@@ -1,0 +1,18 @@
+# Dépendances du moteur Moonshine (ASR edge, faible latence)
+#
+# Inférence : transformers >= 4.48 embarque MoonshineForConditionalGeneration.
+transformers>=4.48
+torch
+datasets
+soundfile
+librosa
+
+# Fine-tuning (fine_tuning/train_moonshine.py)
+accelerate
+evaluate
+jiwer
+
+# Export et inférence ONNX — optionnels.
+# Sans eux, le backend "torch" reste pleinement fonctionnel.
+# optimum[onnxruntime]
+# onnx

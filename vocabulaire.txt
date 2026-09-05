@@ -33,6 +33,7 @@ CDR
 DID
 pcap
 sngrep
+ORL
 
 # --- IoT / Automation ---
 Node-RED

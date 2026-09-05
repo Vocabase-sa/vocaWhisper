@@ -17,6 +17,7 @@ import sys
 import os
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 
 IS_WINDOWS = platform.system() == "Windows"
 IS_MAC = platform.system() == "Darwin"
@@ -67,19 +68,26 @@ os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, "whisper_dictation.log")
 
 # Configurer le logging fichier (indispensable avec pythonw.exe qui masque stdout/stderr)
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    encoding="utf-8",
+# Fichier rotaté : sans rotation le log atteignait 754 Mo (jamais purgé).
+_log_handler = RotatingFileHandler(
+    LOG_FILE, maxBytes=50 * 1024 * 1024, backupCount=5, encoding="utf-8"
 )
-# Rediriger stderr vers le fichier log pour capturer les crashs non gérés
-sys.stderr = open(LOG_FILE, "a", encoding="utf-8")
+_log_handler.setFormatter(
+    logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S")
+)
+_handlers = [_log_handler]
+# En console (python.exe), garder l'affichage ; en pythonw.exe il n'y en a pas.
+if sys.stdout is not None and getattr(sys.stdout, "isatty", lambda: False)():
+    _handlers.append(logging.StreamHandler(sys.stdout))
+logging.basicConfig(level=logging.INFO, handlers=_handlers)
 
-# Protéger stdout pour pythonw.exe (stdout=None → crash sur print)
+# stderr/stdout vont dans un fichier SEPARE : garder un handle ouvert sur
+# LOG_FILE empecherait la rotation (os.rename echoue sous Windows).
+_STDERR_FILE = os.path.join(LOG_DIR, "stderr.log")
+_stderr_fh = open(_STDERR_FILE, "a", encoding="utf-8")
+sys.stderr = _stderr_fh
 if sys.stdout is None:
-    sys.stdout = open(LOG_FILE, "a", encoding="utf-8")
+    sys.stdout = _stderr_fh
 
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 VOCAB_FILE = os.path.join(BASE_DIR, "vocabulaire.txt")
@@ -138,9 +146,27 @@ DEFAULTS = {
     "groq_api_key": "",
     "groq_model": "whisper-large-v3-turbo",
     "groq_fallback_local": False,
+    "moonshine_model": "",
+    "moonshine_backend": "torch",
+    "moonshine_device": "auto",
+    "moonshine_fallback_local": False,
+    "wav2vec2_model": "",
+    "wav2vec2_device": "auto",
+    "wav2vec2_fallback_local": False,
+    "wav2vec2_hotwords": False,
+    "wav2vec2_hotword_weight": 10.0,
+    "fastconformer_model": "",
+    "fastconformer_backend": "onnx",
+    "fastconformer_quantization": "int8",
+    "fastconformer_fallback_local": False,
     "install_mode": "full",
     "fuzzy_enabled": True,
     "fuzzy_threshold": 60,
+    "restore_case": True,
+    "restore_case_nouns": True,
+    "restore_case_sentences": True,
+    "restore_case_punctuation": True,
+    "restore_case_style": "title",
     "api_enabled": False,
     "api_host": "0.0.0.0",
     "api_port": 5000,
@@ -244,9 +270,7 @@ state = AppState()
 # Utilitaire d'affichage
 # =============================================================================
 def log(msg: str):
-    """Affiche un message horodaté et flush immédiatement."""
-    timestamp = time.strftime("%H:%M:%S")
-    print(f"[{timestamp}] {msg}", flush=True)
+    """Journalise un message. Un seul écrivain : le handler rotaté."""
     logging.info(msg)
 
 
@@ -269,7 +293,7 @@ MODEL_SIZES_GB = {
 def _get_model_repo(model_name: str) -> str:
     """Retourne le repo HuggingFace pour un modèle faster-whisper."""
     REPO_OVERRIDES = {
-        "large-v3-turbo": "deepdml/faster-whisper-large-v3-turbo",
+        "large-v3-turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
         "distil-large-v2": "Systran/faster-distil-whisper-large-v2",
         "distil-large-v3": "Systran/faster-distil-whisper-large-v3",
     }
@@ -421,6 +445,48 @@ def load_model():
         if custom_path:
             log(f"[WARN] Chemin modèle personnalisé introuvable : {custom_path}")
             log(f"       Fallback sur le modèle standard : {model}")
+
+    # Moonshine ne dépend pas de faster-whisper : le préchargement doit donc
+    # précéder le contrôle _HAS_FASTER_WHISPER, sinon une installation sans
+    # faster-whisper paierait ~10 s de latence au premier appel.
+    if config.get("stt_engine") == "moonshine":
+        try:
+            from moonshine_engine import get_engine
+            get_engine(config, log=log).load()
+        except Exception as e:
+            log(f"[Moonshine] Préchargement impossible : {e}")
+
+        if not config.get("moonshine_fallback_local", False):
+            log("[Moonshine] Moteur edge sélectionné — pas de modèle Whisper à charger.")
+            state.model = None
+            return
+        log("[Moonshine] Chargement du modèle Whisper en fallback...")
+
+    if config.get("stt_engine") == "wav2vec2":
+        try:
+            from wav2vec2_engine import get_engine as get_w2v_engine
+            get_w2v_engine(config, log=log).load()
+        except Exception as e:
+            log(f"[wav2vec2] Préchargement impossible : {e}")
+
+        if not config.get("wav2vec2_fallback_local", False):
+            log("[wav2vec2] Moteur CTC sélectionné — pas de modèle Whisper à charger.")
+            state.model = None
+            return
+        log("[wav2vec2] Chargement du modèle Whisper en fallback...")
+
+    if config.get("stt_engine") == "fastconformer":
+        try:
+            from fastconformer_engine import get_engine as get_fc_engine
+            get_fc_engine(config, log=log).load()
+        except Exception as e:
+            log(f"[FastConformer] Préchargement impossible : {e}")
+
+        if not config.get("fastconformer_fallback_local", False):
+            log("[FastConformer] Moteur NeMo sélectionné — pas de modèle Whisper à charger.")
+            state.model = None
+            return
+        log("[FastConformer] Chargement du modèle Whisper en fallback...")
 
     if not _HAS_FASTER_WHISPER:
         log("[Groq-only] faster-whisper non installé — mode cloud uniquement.")
@@ -588,9 +654,24 @@ def _transcribe_local(audio: np.ndarray) -> str:
     segments, info = state.model.transcribe(
         audio,
         language=config["language"],
-        beam_size=5,
-        vad_filter=False,
+        beam_size=1,
         initial_prompt=prompt,
+        # --- Garde-fous anti-boucle de repetition ---
+        # Sans eux, un audio pathologique (silence, musique d'attente) fait
+        # boucler le decodeur pendant des heures en tenant state.lock, ce qui
+        # gele toute l'API. Cf. incident du 2026-09-04 21:47 UTC (10 h 15).
+        condition_on_previous_text=False,  # n'auto-alimente plus la repetition
+        max_new_tokens=200,                # borne dure ; 223 (prompt max) + 200 < 448
+        repetition_penalty=1.1,
+        no_repeat_ngram_size=3,
+        vad_filter=True,                   # ecarte silences et musique d'attente
+        # Reglage volontairement permissif : l'audio est de la voix VoIP 8 kHz
+        # (bande etroite, reechantillonnee), qu'un VAD strict rognerait.
+        vad_parameters={
+            "threshold": 0.3,
+            "min_silence_duration_ms": 1000,
+            "speech_pad_ms": 400,
+        },
     )
 
     text_parts = []
@@ -647,11 +728,38 @@ def _transcribe_groq(audio: np.ndarray) -> str:
     return text
 
 
-def transcribe(audio: np.ndarray) -> str:
-    """Transcrit l'audio avec le moteur configuré (local ou Groq).
+def _transcribe_moonshine(audio: np.ndarray) -> str:
+    """Transcrit l'audio avec Moonshine (ASR edge, faible latence).
 
-    Si Groq est sélectionné mais échoue (rate limit, erreur réseau, etc.),
-    bascule automatiquement sur le modèle local s'il est chargé.
+    Moonshine n'accepte pas d'initial_prompt : le vocabulaire n'est donc pas
+    injecté en amont, contrairement au moteur local. Les corrections et le
+    fuzzy matching restent appliqués en aval par transcribe().
+    """
+    from moonshine_engine import transcribe as moonshine_transcribe
+    return moonshine_transcribe(audio, config=config, log=log)
+
+
+def _transcribe_wav2vec2(audio: np.ndarray) -> str:
+    """Transcrit l'audio avec wav2vec2 (CTC).
+
+    La sortie est en minuscules et sans ponctuation : c'est le comportement
+    normal d'un modèle CTC, qui prédit des caractères sans mise en forme.
+    """
+    from wav2vec2_engine import transcribe as w2v_transcribe
+    return w2v_transcribe(audio, config=config, log=log)
+
+
+def _transcribe_fastconformer(audio: np.ndarray) -> str:
+    """Transcrit l'audio avec FastConformer (NeMo, backend ONNX ou .nemo)."""
+    from fastconformer_engine import transcribe as fc_transcribe
+    return fc_transcribe(audio, config=config, log=log)
+
+
+def transcribe(audio: np.ndarray) -> str:
+    """Transcrit l'audio avec le moteur configuré (local, Groq ou Moonshine).
+
+    Si le moteur sélectionné échoue (rate limit, erreur réseau, modèle
+    manquant), bascule automatiquement sur le modèle local s'il est chargé.
     """
     engine = config.get("stt_engine", "local")
     log(f"Transcription en cours ({engine})...")
@@ -667,6 +775,39 @@ def transcribe(audio: np.ndarray) -> str:
                 text = _transcribe_local(audio)
             else:
                 log("[Groq] Pas de modèle local disponible en fallback.")
+                raise
+    elif engine == "moonshine":
+        try:
+            text = _transcribe_moonshine(audio)
+        except Exception as e:
+            log(f"[Moonshine] ERREUR : {e}")
+            if state.model is not None:
+                log("[Moonshine → Local] Fallback sur le modèle local...")
+                text = _transcribe_local(audio)
+            else:
+                log("[Moonshine] Pas de modèle local disponible en fallback.")
+                raise
+    elif engine == "wav2vec2":
+        try:
+            text = _transcribe_wav2vec2(audio)
+        except Exception as e:
+            log(f"[wav2vec2] ERREUR : {e}")
+            if state.model is not None:
+                log("[wav2vec2 → Local] Fallback sur le modèle local...")
+                text = _transcribe_local(audio)
+            else:
+                log("[wav2vec2] Pas de modèle local disponible en fallback.")
+                raise
+    elif engine == "fastconformer":
+        try:
+            text = _transcribe_fastconformer(audio)
+        except Exception as e:
+            log(f"[FastConformer] ERREUR : {e}")
+            if state.model is not None:
+                log("[FastConformer → Local] Fallback sur le modèle local...")
+                text = _transcribe_local(audio)
+            else:
+                log("[FastConformer] Pas de modèle local disponible en fallback.")
                 raise
     else:
         text = _transcribe_local(audio)
@@ -685,6 +826,22 @@ def transcribe(audio: np.ndarray) -> str:
             if corrected != text:
                 log(f"[FUZZY] '{text}' -> '{corrected}'")
                 text = corrected
+
+        # Remise en forme : les moteurs CTC (wav2vec2) et LinTO transcrivent en
+        # minuscules sans ponctuation. Le traitement est idempotent, donc sans
+        # effet sur les sorties déjà mises en forme (Whisper, Groq).
+        if config.get("restore_case", True):
+            from text_case import restore
+            restored = restore(
+                text,
+                proper_nouns=config.get("restore_case_nouns", True),
+                sentences=config.get("restore_case_sentences", True),
+                punctuation=config.get("restore_case_punctuation", True),
+                style=config.get("restore_case_style", "title"),
+            )
+            if restored != text:
+                log(f"[CASSE] '{text}' -> '{restored}'")
+                text = restored
     else:
         log("(aucun texte détecté)")
 

@@ -1,10 +1,12 @@
 ' =============================================
-' Whisper Dictation - Lanceur silencieux
+' VocaWhisper - Lanceur silencieux (admin)
 ' =============================================
 ' Lance le programme SANS ouvrir de fenetre CMD.
+' S'auto-eleve en administrateur pour que les
+' raccourcis clavier fonctionnent meme quand une
+' fenetre admin est au premier plan (ex: VS Code).
 ' Double-cliquer sur ce fichier pour demarrer.
 
-Set WshShell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 
 ' Chemin du script (meme dossier que ce .vbs)
@@ -14,7 +16,14 @@ mainScript = scriptDir & "\whisper_dictation.py"
 
 ' Verifier que pythonw.exe existe
 If Not fso.FileExists(pythonExe) Then
-    MsgBox "pythonw.exe introuvable :" & vbCrLf & pythonExe & vbCrLf & vbCrLf & "Lance d'abord install.bat pour creer le venv.", vbCritical, "Whisper Dictation"
+    MsgBox "pythonw.exe introuvable :" & vbCrLf & pythonExe & vbCrLf & vbCrLf & "Lancez d'abord install_windows.bat pour creer le venv.", vbCritical, "VocaWhisper"
+    WScript.Quit
+End If
+
+' Auto-elevation en administrateur si pas deja admin
+If WScript.Arguments.Count = 0 Then
+    ' Relancer ce script en admin via ShellExecute "runas"
+    CreateObject("Shell.Application").ShellExecute "wscript.exe", """" & WScript.ScriptFullName & """ /elevated", "", "runas", 0
     WScript.Quit
 End If
 
@@ -22,4 +31,5 @@ End If
 WScript.Sleep 5000
 
 ' Lancer en mode invisible (0 = hidden, False = ne pas attendre)
+Set WshShell = CreateObject("WScript.Shell")
 WshShell.Run """" & pythonExe & """ """ & mainScript & """", 0, False
